@@ -10,6 +10,7 @@ import MatchPrediction from "./pages/MatchPrediction";
 import Fixtures from "./pages/Fixtures";
 import Team from "./pages/Team";
 import Compare from "./pages/Compare";
+import Profile from "./pages/Profile";
 
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/fixtures" element={<Fixtures />} />
         <Route path="/team" element={<Team />} />
         <Route path="/compare" element={<Compare />} />
+        <Route path="/profile" element={<Profile />} />
 
       </Routes>
     </BrowserRouter>

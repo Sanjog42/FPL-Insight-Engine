@@ -9,21 +9,28 @@ export default function Predictions() {
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [playerId, setPlayerId] = useState("");
-  const [gameweek, setGameweek] = useState("");
+  const [search, setSearch] = useState("");
+  const [onlyAvailable, setOnlyAvailable] = useState(true);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
+  async function loadPlayers(force = false) {
+    setLoadingPlayers(true);
+    try {
+      const res = await apiFetch(`/api/fpl/bootstrap/${force ? "?force_refresh=1" : ""}`);
+      setPlayers(res?.data?.elements || []);
+      setTeams(res?.data?.teams || []);
+    } catch (ex) {
+      setErr(ex.message || "Failed to load player list.");
+    } finally {
+      setLoadingPlayers(false);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiFetch("/api/fpl/bootstrap/");
-        setPlayers(res?.data?.elements || []);
-        setTeams(res?.data?.teams || []);
-      } catch (ex) {
-        setErr(ex.message || "Failed to load player list.");
-      }
-    })();
+    loadPlayers(false);
   }, []);
 
   const teamMap = useMemo(() => {
@@ -32,8 +39,22 @@ export default function Predictions() {
     return map;
   }, [teams]);
 
+  const filteredPlayers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return players.filter((p) => {
+      if (onlyAvailable && p.status && p.status !== "a") {
+        return false;
+      }
+      if (!q) return true;
+      const team = teamMap.get(p.team);
+      const teamName = `${team?.short_name || ""} ${team?.name || ""}`.toLowerCase();
+      const name = `${p.first_name} ${p.second_name} ${p.web_name || ""}`.toLowerCase();
+      return name.includes(q) || teamName.includes(q);
+    });
+  }, [players, teamMap, search, onlyAvailable]);
+
   const playerOptions = useMemo(() => {
-    return players.map((p) => {
+    return filteredPlayers.map((p) => {
       const team = teamMap.get(p.team);
       const teamShort = team?.short_name || team?.name || "UNK";
       return {
@@ -41,7 +62,7 @@ export default function Predictions() {
         name: `${p.first_name} ${p.second_name} (${teamShort})`,
       };
     });
-  }, [players, teamMap]);
+  }, [filteredPlayers, teamMap]);
 
   async function submit(e) {
     e.preventDefault();
@@ -55,7 +76,6 @@ export default function Predictions() {
     try {
       const payload = {
         player_id: Number(playerId),
-        gameweek: gameweek ? Number(gameweek) : null,
       };
       const res = await apiFetch("/api/predictions/player-points/", {
         method: "POST",
@@ -76,6 +96,51 @@ export default function Predictions() {
     >
       <section className="section">
         <div className="card">
+          <div className="grid grid-3" style={{ marginBottom: "1rem" }}>
+            <div className="form-group">
+              <label className="label">Search player</label>
+              <input
+                className="input"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Name or team..."
+              />
+            </div>
+            <div className="form-group">
+              <label className="label">Availability</label>
+              <div className="pill-row">
+                <button
+                  type="button"
+                  className={`pill ${onlyAvailable ? "pill-active" : ""}`}
+                  onClick={() => setOnlyAvailable(true)}
+                >
+                  Available
+                </button>
+                <button
+                  type="button"
+                  className={`pill ${!onlyAvailable ? "pill-active" : ""}`}
+                  onClick={() => setOnlyAvailable(false)}
+                >
+                  All Players
+                </button>
+              </div>
+            </div>
+            <div className="form-group" style={{ alignSelf: "end" }}>
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={() => loadPlayers(true)}
+                disabled={loadingPlayers}
+              >
+                {loadingPlayers ? "Refreshing..." : "Refresh data"}
+              </button>
+            </div>
+          </div>
+
+          <div className="inline-note">
+            Showing {playerOptions.length} of {players.length} players
+          </div>
+
           <form className="grid grid-3" onSubmit={submit}>
             <div className="form-group">
               <label className="label">Player</label>
@@ -94,18 +159,6 @@ export default function Predictions() {
               </select>
             </div>
 
-            <div className="form-group">
-              <label className="label">Gameweek (optional)</label>
-              <input
-                className="input"
-                type="number"
-                min="1"
-                value={gameweek}
-                onChange={(e) => setGameweek(e.target.value)}
-                placeholder="Auto"
-              />
-            </div>
-
             <div className="form-group" style={{ alignSelf: "end" }}>
               <button className="btn btn-accent" type="submit" disabled={loading}>
                 {loading ? "Predicting..." : "Predict Points"}
@@ -121,7 +174,7 @@ export default function Predictions() {
                 <div>
                   <strong>Predicted Points</strong>
                   <div className="text-muted">
-                    GW {result.gameweek || "N/A"} â€¢ Player ID {result.player_id}
+                    GW {result.gameweek || "N/A"} - Player ID {result.player_id}
                   </div>
                 </div>
                 <div className="player-stat-right">
@@ -131,21 +184,24 @@ export default function Predictions() {
                   <div className="player-sub-label">
                     Confidence: {Math.round(result.confidence * 100)}%
                   </div>
+                  {result.features_used?.data_source === "bootstrap-only" ? (
+                    <div className="player-sub-label">Limited recent history</div>
+                  ) : null}
                 </div>
               </div>
 
               <div className="grid grid-3" style={{ marginTop: "0.8rem" }}>
                 <div className="card mini-card">
-                  <div className="card-subtitle">Avg Minutes</div>
-                  <div className="card-title">{result.features_used.avg_minutes}</div>
+                  <div className="card-subtitle">Prediction Basis</div>
+                  <div className="card-title">Recent Form</div>
                 </div>
                 <div className="card mini-card">
-                  <div className="card-subtitle">Opponent Def Strength</div>
-                  <div className="card-title">{result.features_used.opponent_defence_strength}</div>
+                  <div className="card-subtitle">Minutes Trend</div>
+                  <div className="card-title">Included</div>
                 </div>
                 <div className="card mini-card">
-                  <div className="card-subtitle">Venue</div>
-                  <div className="card-title">{result.features_used.venue}</div>
+                  <div className="card-subtitle">Opponent Context</div>
+                  <div className="card-title">Included</div>
                 </div>
               </div>
             </div>

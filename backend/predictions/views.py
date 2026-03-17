@@ -16,6 +16,7 @@ from .services.predictors import (
     predict_match,
     predict_player_points,
     predict_price_change,
+    predict_upcoming_matches,
 )
 
 
@@ -128,6 +129,17 @@ class FDRView(APIView):
             result = predict_fdr(payload["team_id"], payload.get("horizon", 5))
         except KeyError:
             raise NotFound("Unknown team_id")
+        except Exception as exc:
+            _handle_fpl_error(exc)
+        return Response(result)
+
+
+class UpcomingMatchPredictView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            result = predict_upcoming_matches()
         except Exception as exc:
             _handle_fpl_error(exc)
         return Response(result)

@@ -6,6 +6,36 @@ export default function Dashboard() {
   const nav = useNavigate();
   const [budget, setBudget] = useState(0.0);
   const [transfers, setTransfers] = useState(0);
+  const [user, setUser] = useState(null);
+  const [hasTeamStored, setHasTeamStored] = useState(false);
+  const [currentGw, setCurrentGw] = useState(null);
+  const [deadlineTime, setDeadlineTime] = useState(null);
+  const [timeLeft, setTimeLeft] = useState("");
+
+  function formatTimeLeft(target) {
+    if (!target) return "";
+    const diffMs = target - Date.now();
+    if (diffMs <= 0) return "Deadline passed";
+    const totalMinutes = Math.floor(diffMs / 60000);
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const minutes = totalMinutes % 60;
+    const dayPart = days > 0 ? `${days}d ` : "";
+    const hourPart = `${hours}h`.padStart(3, "0");
+    const minPart = `${minutes}m`.padStart(3, "0");
+    return `DL in ${dayPart}${hourPart} ${minPart}`;
+  }
+
+  function formatLocalDeadline(target) {
+    if (!target) return "Deadline unavailable";
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(target));
+  }
 
   useEffect(() => {
     // 🔒 Basic protection: if no token, go to login
@@ -18,7 +48,8 @@ export default function Dashboard() {
     // Optional: verify token/user
     (async () => {
       try {
-        await apiFetch("/api/auth/me/");
+        const me = await apiFetch("/api/auth/me/");
+        setUser(me);
       } catch {
         setToken(null);
         nav("/login");
@@ -26,13 +57,53 @@ export default function Dashboard() {
     })();
 
     // Load stored team state from localStorage (same logic as your HTML)
-    const stored = JSON.parse(localStorage.getItem("fplTeamState") || "{}");
+    const raw = localStorage.getItem("fplTeamState");
+    const stored = JSON.parse(raw || "{}");
     const remainingBudget = typeof stored.remainingBudget === "number" ? stored.remainingBudget : 0;
     const freeTransfers = typeof stored.freeTransfers === "number" ? stored.freeTransfers : 0;
 
     setBudget(remainingBudget);
     setTransfers(freeTransfers);
+    setHasTeamStored(stored?.teamStored === true);
   }, [nav]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    async function loadBootstrap() {
+      try {
+        const res = await apiFetch("/api/fpl/bootstrap/", { signal: controller.signal });
+        const events = res?.data?.events || [];
+        const next = events.find((e) => e.is_next);
+        if (!next) return;
+        const deadline = next.deadline_time ? new Date(next.deadline_time).getTime() : null;
+        if (active) {
+          setCurrentGw(next.id ?? null);
+          setDeadlineTime(deadline);
+        }
+      } catch {
+        // ignore bootstrap errors; keep fallback UI
+      }
+    }
+
+    loadBootstrap();
+
+    const timer = setInterval(() => {
+      if (!deadlineTime) return;
+      setTimeLeft(formatTimeLeft(deadlineTime));
+    }, 30 * 1000);
+
+    return () => {
+      active = false;
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [deadlineTime]);
+
+  useEffect(() => {
+    setTimeLeft(formatTimeLeft(deadlineTime));
+  }, [deadlineTime]);
 
   function simulateNewGameweek() {
     const stored = JSON.parse(localStorage.getItem("fplTeamState") || "{}");
@@ -52,6 +123,14 @@ export default function Dashboard() {
     nav("/login");
   }
 
+  const displayName = user?.full_name?.trim() || user?.username || "User";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0]?.toUpperCase())
+    .slice(0, 2)
+    .join("") || "U";
+
   return (
     <div className="app">
       <main className="content dashboard-shell">
@@ -63,8 +142,8 @@ export default function Dashboard() {
 
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
             <Link to="/profile" className="profile-pill">
-              <span className="profile-avatar">FM</span>
-              <span className="profile-name">fpl_manager_2024</span>
+              <span className="profile-avatar">{initials}</span>
+              <span className="profile-name">{displayName}</span>
             </Link>
 
             <button className="btn btn-outline" onClick={logout}>
@@ -88,12 +167,16 @@ export default function Dashboard() {
               <div className="card-header">
                 <div>
                   <div className="card-subtitle">Current Gameweek</div>
-                  <div className="card-title">Gameweek 15</div>
+                  <div className="card-title">
+                    {currentGw ? `Gameweek ${currentGw}` : "Gameweek --"}
+                  </div>
                 </div>
               </div>
-              <div className="stat-card-value">DL in 2d 04h</div>
+              <div className="stat-card-value">
+                {timeLeft || "Loading deadline..."}
+              </div>
               <p className="text-muted" style={{ marginTop: "0.5rem" }}>
-                Deadline approaching – finalize your team.
+                Deadline: {formatLocalDeadline(deadlineTime)}
               </p>
             </article>
 
@@ -104,9 +187,9 @@ export default function Dashboard() {
                   <div className="card-title">Money in the bank</div>
                 </div>
               </div>
-              <div className="stat-card-value">£{budget.toFixed(1)}M</div>
+              <div className="stat-card-value">{hasTeamStored ? `�${budget.toFixed(1)}M` : "None"}</div>
               <p className="text-muted" style={{ marginTop: "0.5rem" }}>
-                Store your team to load budget.
+                {hasTeamStored ? "Budget loaded from stored team." : "Store your team to load budget."}
               </p>
             </article>
 
@@ -117,20 +200,14 @@ export default function Dashboard() {
                   <div className="card-title">This Gameweek</div>
                 </div>
               </div>
-              <div className="stat-card-value">{transfers}</div>
+              <div className="stat-card-value">{hasTeamStored ? transfers : "None"}</div>
               <p className="text-muted" style={{ marginTop: "0.5rem" }}>
-                Free transfers update after storing team.
+                {hasTeamStored ? "Free transfers loaded from stored team." : "Store your team to load transfers."}
               </p>
             </article>
           </div>
         </section>
 
-        {/* Simulate New Gameweek */}
-        <section className="section">
-          <button className="btn btn-outline" onClick={simulateNewGameweek}>
-            🔄 Simulate New Gameweek (+1 Free Transfer, max 2)
-          </button>
-        </section>
 
         {/* Feature Cards */}
         <section className="section">
@@ -296,3 +373,8 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
+
+

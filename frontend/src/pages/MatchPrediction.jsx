@@ -10,7 +10,11 @@ export default function MatchPrediction() {
   const [homeId, setHomeId] = useState("");
   const [awayId, setAwayId] = useState("");
   const [result, setResult] = useState(null);
+  const [mode, setMode] = useState("upcoming");
+  const [upcoming, setUpcoming] = useState([]);
+  const [upcomingGw, setUpcomingGw] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
@@ -20,6 +24,21 @@ export default function MatchPrediction() {
         setTeams(res?.data?.teams || []);
       } catch (ex) {
         setErr(ex.message || "Failed to load teams.");
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setLoadingUpcoming(true);
+      try {
+        const res = await apiFetch("/api/predictions/match-upcoming/");
+        setUpcoming(res?.fixtures || []);
+        setUpcomingGw(res?.gameweek || null);
+      } catch (ex) {
+        setErr(ex.message || "Failed to load upcoming predictions.");
+      } finally {
+        setLoadingUpcoming(false);
       }
     })();
   }, []);
@@ -60,55 +79,126 @@ export default function MatchPrediction() {
   return (
     <AppLayout
       title="Match Outcome Predictor"
-      subtitle="Expected W/D/L plus projected xG using team strength proxies."
+      subtitle="Expected W/D/L plus projected xG using team strength and recent form."
     >
       <section className="section">
         <div className="card">
-          <form className="grid grid-3" onSubmit={submit}>
-            <div className="form-group">
-              <label className="label">Home Team</label>
-              <select
-                className="input"
-                value={homeId}
-                onChange={(e) => setHomeId(e.target.value)}
-                required
-              >
-                <option value="">Select home team...</option>
-                {teamOptions.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="pill-row" style={{ marginBottom: "1rem" }}>
+            <button
+              type="button"
+              className={`pill ${mode === "upcoming" ? "pill-active" : ""}`}
+              onClick={() => setMode("upcoming")}
+            >
+              Upcoming Gameweek
+            </button>
+            <button
+              type="button"
+              className={`pill ${mode === "custom" ? "pill-active" : ""}`}
+              onClick={() => setMode("custom")}
+            >
+              Custom Match
+            </button>
+          </div>
 
-            <div className="form-group">
-              <label className="label">Away Team</label>
-              <select
-                className="input"
-                value={awayId}
-                onChange={(e) => setAwayId(e.target.value)}
-                required
-              >
-                <option value="">Select away team...</option>
-                {teamOptions.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
+          {mode === "upcoming" ? (
+            <div>
+              <div className="inline-note">
+                {upcomingGw ? `Showing GW ${upcomingGw}` : "Upcoming fixtures"}
+              </div>
+              {loadingUpcoming ? <p className="text-muted">Loading fixtures...</p> : null}
+              {upcoming.length === 0 && !loadingUpcoming ? (
+                <p className="text-muted">No upcoming fixtures available.</p>
+              ) : null}
+              <div className="grid grid-2">
+                {upcoming.map((fx) => (
+                  <div key={fx.fixture_id} className="player-card">
+                    <div className="player-row">
+                      <div>
+                        <strong>{fx.home_team?.name} vs {fx.away_team?.name}</strong>
+                        <div className="text-muted">
+                          GW {fx.event} {fx.kickoff_time ? `• ${fx.kickoff_time}` : ""}
+                        </div>
+                      </div>
+                      <div className="player-stat-right">
+                        <div className="text-accent player-main-stat">
+                          {fx.prediction?.outcome}
+                        </div>
+                        <div className="player-sub-label">
+                          xG: {fx.prediction?.home_xg} - {fx.prediction?.away_xg}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-3" style={{ marginTop: "0.8rem" }}>
+                      <div className="card mini-card">
+                        <div className="card-subtitle">Home Win</div>
+                        <div className="card-title">
+                          {Math.round((fx.prediction?.probs?.home || 0) * 100)}%
+                        </div>
+                      </div>
+                      <div className="card mini-card">
+                        <div className="card-subtitle">Draw</div>
+                        <div className="card-title">
+                          {Math.round((fx.prediction?.probs?.draw || 0) * 100)}%
+                        </div>
+                      </div>
+                      <div className="card mini-card">
+                        <div className="card-subtitle">Away Win</div>
+                        <div className="card-title">
+                          {Math.round((fx.prediction?.probs?.away || 0) * 100)}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </select>
+              </div>
             </div>
+          ) : (
+            <form className="grid grid-3" onSubmit={submit}>
+              <div className="form-group">
+                <label className="label">Home Team</label>
+                <select
+                  className="input"
+                  value={homeId}
+                  onChange={(e) => setHomeId(e.target.value)}
+                  required
+                >
+                  <option value="">Select home team...</option>
+                  {teamOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="form-group" style={{ alignSelf: "end" }}>
-              <button className="btn btn-accent" type="submit" disabled={loading}>
-                {loading ? "Predicting..." : "Predict Match"}
-              </button>
-            </div>
-          </form>
+              <div className="form-group">
+                <label className="label">Away Team</label>
+                <select
+                  className="input"
+                  value={awayId}
+                  onChange={(e) => setAwayId(e.target.value)}
+                  required
+                >
+                  <option value="">Select away team...</option>
+                  {teamOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ alignSelf: "end" }}>
+                <button className="btn btn-accent" type="submit" disabled={loading}>
+                  {loading ? "Predicting..." : "Predict Match"}
+                </button>
+              </div>
+            </form>
+          )}
 
           {err ? <p style={{ color: "#ef4444" }}>{err}</p> : null}
 
-          {result ? (
+          {result && mode === "custom" ? (
             <div className="player-card" style={{ marginTop: "1rem" }}>
               <div className="player-row">
                 <div>

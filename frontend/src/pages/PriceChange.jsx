@@ -9,20 +9,28 @@ export default function PriceChange() {
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [playerId, setPlayerId] = useState("");
+  const [search, setSearch] = useState("");
+  const [onlyAvailable, setOnlyAvailable] = useState(true);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
+  async function loadPlayers(force = false) {
+    setLoadingPlayers(true);
+    try {
+      const res = await apiFetch(`/api/fpl/bootstrap/${force ? "?force_refresh=1" : ""}`);
+      setPlayers(res?.data?.elements || []);
+      setTeams(res?.data?.teams || []);
+    } catch (ex) {
+      setErr(ex.message || "Failed to load player list.");
+    } finally {
+      setLoadingPlayers(false);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiFetch("/api/fpl/bootstrap/");
-        setPlayers(res?.data?.elements || []);
-        setTeams(res?.data?.teams || []);
-      } catch (ex) {
-        setErr(ex.message || "Failed to load player list.");
-      }
-    })();
+    loadPlayers(false);
   }, []);
 
   const teamMap = useMemo(() => {
@@ -31,8 +39,22 @@ export default function PriceChange() {
     return map;
   }, [teams]);
 
+  const filteredPlayers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return players.filter((p) => {
+      if (onlyAvailable && p.status && p.status !== "a") {
+        return false;
+      }
+      if (!q) return true;
+      const team = teamMap.get(p.team);
+      const teamName = `${team?.short_name || ""} ${team?.name || ""}`.toLowerCase();
+      const name = `${p.first_name} ${p.second_name} ${p.web_name || ""}`.toLowerCase();
+      return name.includes(q) || teamName.includes(q);
+    });
+  }, [players, teamMap, search, onlyAvailable]);
+
   const playerOptions = useMemo(() => {
-    return players.map((p) => {
+    return filteredPlayers.map((p) => {
       const team = teamMap.get(p.team);
       const teamShort = team?.short_name || team?.name || "UNK";
       return {
@@ -40,7 +62,7 @@ export default function PriceChange() {
         name: `${p.first_name} ${p.second_name} (${teamShort})`,
       };
     });
-  }, [players, teamMap]);
+  }, [filteredPlayers, teamMap]);
 
   async function submit(e) {
     e.preventDefault();
@@ -78,6 +100,51 @@ export default function PriceChange() {
     >
       <section className="section">
         <div className="card">
+          <div className="grid grid-3" style={{ marginBottom: "1rem" }}>
+            <div className="form-group">
+              <label className="label">Search player</label>
+              <input
+                className="input"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Name or team..."
+              />
+            </div>
+            <div className="form-group">
+              <label className="label">Availability</label>
+              <div className="pill-row">
+                <button
+                  type="button"
+                  className={`pill ${onlyAvailable ? "pill-active" : ""}`}
+                  onClick={() => setOnlyAvailable(true)}
+                >
+                  Available
+                </button>
+                <button
+                  type="button"
+                  className={`pill ${!onlyAvailable ? "pill-active" : ""}`}
+                  onClick={() => setOnlyAvailable(false)}
+                >
+                  All Players
+                </button>
+              </div>
+            </div>
+            <div className="form-group" style={{ alignSelf: "end" }}>
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={() => loadPlayers(true)}
+                disabled={loadingPlayers}
+              >
+                {loadingPlayers ? "Refreshing..." : "Refresh data"}
+              </button>
+            </div>
+          </div>
+
+          <div className="inline-note">
+            Showing {playerOptions.length} of {players.length} players
+          </div>
+
           <form className="grid grid-3" onSubmit={submit}>
             <div className="form-group">
               <label className="label">Player</label>
@@ -119,6 +186,9 @@ export default function PriceChange() {
                   <div className="player-sub-label">
                     Probability: {Math.round(result.probability * 100)}%
                   </div>
+                  {result.features_used?.data_source === "bootstrap-only" ? (
+                    <div className="player-sub-label">Limited recent history</div>
+                  ) : null}
                 </div>
               </div>
 
