@@ -1,14 +1,16 @@
 from rest_framework import status
-from rest_framework.exceptions import APIException, NotFound
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .serializers import (
     FDRQuerySerializer,
+    FullTeamGenerateRequestSerializer,
     MatchRequestSerializer,
     PlayerPointsRequestSerializer,
     PriceRequestSerializer,
+    TransferSuggestRequestSerializer,
 )
 from .services.fpl_client import FPLServiceUnavailable, get_bootstrap, get_fixtures
 from .services.predictors import (
@@ -17,7 +19,9 @@ from .services.predictors import (
     predict_player_points,
     predict_price_change,
     predict_upcoming_matches,
+    predict_captaincy_top_picks,
 )
+from .services.team_optimizer import generate_full_team, suggest_transfers
 
 
 class FPLUnavailable(APIException):
@@ -143,3 +147,68 @@ class UpcomingMatchPredictView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
         return Response(result)
+
+
+
+class CaptaincyTopPicksView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        limit_param = request.query_params.get("limit")
+        limit = 10
+        if limit_param is not None:
+            try:
+                limit = int(limit_param)
+            except ValueError:
+                raise ValidationError("limit must be an integer")
+
+        limit = max(1, min(limit, 20))
+
+        try:
+            result = predict_captaincy_top_picks(limit=limit)
+        except Exception as exc:
+            _handle_fpl_error(exc)
+
+        return Response(result)
+
+class TransferSuggestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = TransferSuggestRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        try:
+            result = suggest_transfers(
+                team_slots=payload["team_slots"],
+                remaining_budget=payload["remaining_budget"],
+                free_transfers=payload.get("free_transfers", 1),
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+        except KeyError:
+            raise NotFound("Unknown player_id in team_slots")
+        except Exception as exc:
+            _handle_fpl_error(exc)
+
+        return Response(result)
+
+
+class FullTeamGenerateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = FullTeamGenerateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        try:
+            result = generate_full_team(budget=payload.get("budget", 100.0))
+        except ValueError as exc:
+            raise ValidationError(str(exc))
+        except Exception as exc:
+            _handle_fpl_error(exc)
+
+        return Response(result)
+

@@ -8,9 +8,13 @@ export default function Dashboard() {
   const [transfers, setTransfers] = useState(0);
   const [user, setUser] = useState(null);
   const [hasTeamStored, setHasTeamStored] = useState(false);
+  const [teamStorageKey, setTeamStorageKey] = useState(null);
   const [currentGw, setCurrentGw] = useState(null);
   const [deadlineTime, setDeadlineTime] = useState(null);
   const [timeLeft, setTimeLeft] = useState("");
+  const [captainPreview, setCaptainPreview] = useState(null);
+  const [playerPreview, setPlayerPreview] = useState(null);
+  const [matchPreview, setMatchPreview] = useState(null);
 
   function formatTimeLeft(target) {
     if (!target) return "";
@@ -38,33 +42,33 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    // 🔒 Basic protection: if no token, go to login
     const token = getToken();
     if (!token) {
       nav("/login");
       return;
     }
 
-    // Optional: verify token/user
     (async () => {
       try {
         const me = await apiFetch("/api/auth/me/");
         setUser(me);
+
+        const userId = Number(me?.id || 0);
+        const key = userId > 0 ? `fplTeamState:user:${userId}` : null;
+        setTeamStorageKey(key);
+
+        const stored = key ? JSON.parse(localStorage.getItem(key) || "{}") : {};
+        const remainingBudget = typeof stored.remainingBudget === "number" ? stored.remainingBudget : 0;
+        const freeTransfers = typeof stored.freeTransfers === "number" ? stored.freeTransfers : 0;
+
+        setBudget(remainingBudget);
+        setTransfers(freeTransfers);
+        setHasTeamStored(stored?.teamStored === true);
       } catch {
         setToken(null);
         nav("/login");
       }
     })();
-
-    // Load stored team state from localStorage (same logic as your HTML)
-    const raw = localStorage.getItem("fplTeamState");
-    const stored = JSON.parse(raw || "{}");
-    const remainingBudget = typeof stored.remainingBudget === "number" ? stored.remainingBudget : 0;
-    const freeTransfers = typeof stored.freeTransfers === "number" ? stored.freeTransfers : 0;
-
-    setBudget(remainingBudget);
-    setTransfers(freeTransfers);
-    setHasTeamStored(stored?.teamStored === true);
   }, [nav]);
 
   useEffect(() => {
@@ -105,13 +109,110 @@ export default function Dashboard() {
     setTimeLeft(formatTimeLeft(deadlineTime));
   }, [deadlineTime]);
 
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCaptainPreview() {
+      try {
+        const res = await apiFetch("/api/predictions/captaincy/?limit=20");
+        if (!active) return;
+        const picks = Array.isArray(res?.picks) ? res.picks : [];
+        const top = picks[0] || null;
+        const topByPoints = picks.reduce((best, p) => {
+          if (!best) return p;
+          return (p?.predicted_points || 0) > (best?.predicted_points || 0) ? p : best;
+        }, null);
+
+        if (top) {
+          setCaptainPreview({
+            gameweek: res?.gameweek,
+            name: top.name,
+            team: top.team,
+            position: top.position,
+            predictedPoints: top.predicted_points,
+            confidence: top.model_confidence,
+          });
+        }
+
+        if (topByPoints) {
+          setPlayerPreview({
+            gameweek: res?.gameweek,
+            name: topByPoints.name,
+            team: topByPoints.team,
+            position: topByPoints.position,
+            predictedPoints: topByPoints.predicted_points,
+            confidence: topByPoints.model_confidence,
+          });
+        }
+      } catch {
+        // keep static fallback if captaincy endpoint is unavailable
+      }
+    }
+
+    loadCaptainPreview();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadMatchPreview() {
+      try {
+        const res = await apiFetch("/api/predictions/match-upcoming/");
+        if (!active) return;
+
+        const fixtures = Array.isArray(res?.fixtures) ? res.fixtures : [];
+        if (!fixtures.length) return;
+
+        const best = fixtures.reduce((top, fx) => {
+          const p = fx?.prediction?.probs || {};
+          const conf = Math.max(Number(p.home || 0), Number(p.draw || 0), Number(p.away || 0));
+          if (!top || conf > top.confidence) {
+            return {
+              fixture: fx,
+              confidence: conf,
+            };
+          }
+          return top;
+        }, null);
+
+        if (!best?.fixture) return;
+        setMatchPreview({
+          gw: res?.gameweek,
+          home: best.fixture?.home_team?.name || "Home",
+          away: best.fixture?.away_team?.name || "Away",
+          outcome: best.fixture?.prediction?.outcome || "-",
+          homeXg: best.fixture?.prediction?.home_xg,
+          awayXg: best.fixture?.prediction?.away_xg,
+          confidence: best.confidence,
+        });
+      } catch {
+        // keep static fallback if upcoming match endpoint is unavailable
+      }
+    }
+
+    loadMatchPreview();
+
+    return () => {
+      active = false;
+    };
+  }, []);
   function simulateNewGameweek() {
-    const stored = JSON.parse(localStorage.getItem("fplTeamState") || "{}");
+    if (!teamStorageKey) {
+      alert("No user-specific team data found.");
+      return;
+    }
+
+    const stored = JSON.parse(localStorage.getItem(teamStorageKey) || "{}");
     let freeTransfers = typeof stored.freeTransfers === "number" ? stored.freeTransfers : 0;
 
     freeTransfers = Math.min(freeTransfers + 1, 2);
     stored.freeTransfers = freeTransfers;
-    localStorage.setItem("fplTeamState", JSON.stringify(stored));
+    localStorage.setItem(teamStorageKey, JSON.stringify(stored));
 
     setTransfers(freeTransfers);
     alert("New gameweek simulated (mock): free transfers now = " + freeTransfers);
@@ -221,22 +322,24 @@ export default function Dashboard() {
               <article className="card dashboard-card-inner">
                 <div className="card-header">
                   <h3 className="card-title">Captaincy Analyzer</h3>
-                  <span className="badge badge-accent">GW 15</span>
+                  <span className="badge badge-accent">Match Model</span>
                 </div>
-                <p className="text-muted">Best captain right now</p>
+                <p className="text-muted">Best captain for next gameweek</p>
                 <div className="player-card" style={{ marginTop: "0.8rem" }}>
                   <div className="player-row">
                     <div>
-                      <strong>Erling Haaland</strong>
-                      <div className="text-muted">FWD • MCI</div>
+                      <strong>{captainPreview?.name || "Loading..."}</strong>
+                      <div className="text-muted">
+                        {(captainPreview?.position === 1 ? "GK" : captainPreview?.position === 2 ? "DEF" : captainPreview?.position === 3 ? "MID" : captainPreview?.position === 4 ? "FWD" : "-")} | {captainPreview?.team || "-"}
+                      </div>
                     </div>
                     <div className="player-stat-right">
-                      <div className="text-accent player-main-stat">12.8 pts</div>
-                      <div className="player-sub-label">Risk: Medium</div>
+                      <div className="text-accent player-main-stat">{captainPreview?.predictedPoints ?? "-"} pts</div>
+                      <div className="player-sub-label">Confidence: {captainPreview?.confidence ? `${Math.round(captainPreview.confidence * 100)}%` : "-"}</div>
                     </div>
                   </div>
                 </div>
-                <p className="dashboard-card-cta">Open Captaincy Analyzer →</p>
+                <p className="dashboard-card-cta">Open Captaincy Analyzer ?</p>
               </article>
             </Link>
 
@@ -246,20 +349,22 @@ export default function Dashboard() {
                   <h3 className="card-title">Player Predictions</h3>
                   <span className="badge badge-soft">Top performer</span>
                 </div>
-                <p className="text-muted">Highest predicted points</p>
+                <p className="text-muted">Highest predicted points next gameweek</p>
                 <div className="player-card" style={{ marginTop: "0.8rem" }}>
                   <div className="player-row">
                     <div>
-                      <strong>Mohamed Salah</strong>
-                      <div className="text-muted">MID • LIV</div>
+                      <strong>{playerPreview?.name || "Loading..."}</strong>
+                      <div className="text-muted">
+                        {(playerPreview?.position === 1 ? "GK" : playerPreview?.position === 2 ? "DEF" : playerPreview?.position === 3 ? "MID" : playerPreview?.position === 4 ? "FWD" : "-")} | {playerPreview?.team || "-"}
+                      </div>
                     </div>
                     <div className="player-stat-right">
-                      <div className="text-accent player-main-stat">13.2 pts</div>
-                      <div className="player-sub-label">Confidence: 86%</div>
+                      <div className="text-accent player-main-stat">{playerPreview?.predictedPoints ?? "-"} pts</div>
+                      <div className="player-sub-label">Confidence: {playerPreview?.confidence ? `${Math.round(playerPreview.confidence * 100)}%` : "-"}</div>
                     </div>
                   </div>
                 </div>
-                <p className="dashboard-card-cta">View all predictions →</p>
+                <p className="dashboard-card-cta">View all predictions &rarr;</p>
               </article>
             </Link>
 
@@ -290,22 +395,24 @@ export default function Dashboard() {
               <article className="card dashboard-card-inner">
                 <div className="card-header">
                   <h3 className="card-title">Match Prediction</h3>
-                  <span className="badge badge-accent">GW 15</span>
+                  <span className="badge badge-accent">Match Model</span>
                 </div>
-                <p className="text-muted">Top fixture this week</p>
+                <p className="text-muted">Most confident next-gameweek prediction</p>
                 <div className="player-card" style={{ marginTop: "0.8rem" }}>
                   <div className="player-row">
                     <div>
-                      <strong>Liverpool vs Luton</strong>
-                      <div className="text-muted">Anfield • Sat 15:00</div>
+                      <strong>{matchPreview ? `${matchPreview.home} vs ${matchPreview.away}` : "Loading..."}</strong>
+                      <div className="text-muted">
+                        {matchPreview ? `GW ${matchPreview.gw} | xG ${matchPreview.homeXg}-${matchPreview.awayXg}` : "-"}
+                      </div>
                     </div>
                     <div className="player-stat-right">
-                      <div className="text-accent player-main-stat">3-0</div>
-                      <div className="player-sub-label">85% confidence</div>
+                      <div className="text-accent player-main-stat">{matchPreview?.outcome || "-"}</div>
+                      <div className="player-sub-label">{matchPreview?.confidence ? `${Math.round(matchPreview.confidence * 100)}% confidence` : "-"}</div>
                     </div>
                   </div>
                 </div>
-                <p className="dashboard-card-cta">View all match predictions →</p>
+                <p className="dashboard-card-cta">View all match predictions &rarr;</p>
               </article>
             </Link>
 
@@ -313,7 +420,7 @@ export default function Dashboard() {
               <article className="card dashboard-card-inner">
                 <div className="card-header">
                   <h3 className="card-title">Fixtures & FDR</h3>
-                  <span className="badge badge-soft">GW 15</span>
+                  <span className="badge badge-soft">Fixture Model</span>
                 </div>
                 <p className="text-muted">Easiest fixture this week (home team)</p>
                 <div className="player-card" style={{ marginTop: "0.8rem" }}>
@@ -336,12 +443,12 @@ export default function Dashboard() {
                   <span className="badge badge-accent">Required for budget</span>
                 </div>
                 <p className="text-muted">
-                  Status: <span className="text-accent">Team not synced (mock)</span>
+                  Status: <span className="text-accent">{hasTeamStored ? "Team synced" : "Team not synced"}</span>
                 </p>
                 <ul className="team-status-list">
                   <li>• Store remaining budget & free transfers</li>
                   <li>• Enter your 15-man squad</li>
-                  <li>• Enable Budget Optimizer for GW 15</li>
+                  <li>• Enable Budget Optimizer</li>
                 </ul>
                 <p className="dashboard-card-cta">View / Update stored team →</p>
               </article>
@@ -373,6 +480,17 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 

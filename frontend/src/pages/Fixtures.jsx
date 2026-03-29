@@ -8,7 +8,6 @@ export default function Fixtures() {
 
   const [teams, setTeams] = useState([]);
   const [teamId, setTeamId] = useState("");
-  const [horizon, setHorizon] = useState("5");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -38,9 +37,7 @@ export default function Fixtures() {
     }
     setLoading(true);
     try {
-      const res = await apiFetch(
-        `/api/predictions/fdr/?team_id=${Number(teamId)}&horizon=${Number(horizon)}`
-      );
+      const res = await apiFetch(`/api/predictions/fdr/?team_id=${Number(teamId)}`);
       setResult(res);
     } catch (ex) {
       setErr(ex.message || "Failed to load FDR.");
@@ -72,18 +69,6 @@ export default function Fixtures() {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="form-group">
-              <label className="label">Horizon (GWs)</label>
-              <input
-                className="input"
-                type="number"
-                min="1"
-                max="10"
-                value={horizon}
-                onChange={(e) => setHorizon(e.target.value)}
-              />
             </div>
 
             <div className="form-group" style={{ alignSelf: "end" }}>

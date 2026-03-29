@@ -9,7 +9,7 @@ export default function Predictions() {
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [playerId, setPlayerId] = useState("");
-  const [search, setSearch] = useState("");
+  const [playerQuery, setPlayerQuery] = useState("");
   const [onlyAvailable, setOnlyAvailable] = useState(true);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [result, setResult] = useState(null);
@@ -39,48 +39,62 @@ export default function Predictions() {
     return map;
   }, [teams]);
 
-  const filteredPlayers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return players.filter((p) => {
-      if (onlyAvailable && p.status && p.status !== "a") {
-        return false;
-      }
-      if (!q) return true;
-      const team = teamMap.get(p.team);
-      const teamName = `${team?.short_name || ""} ${team?.name || ""}`.toLowerCase();
-      const name = `${p.first_name} ${p.second_name} ${p.web_name || ""}`.toLowerCase();
-      return name.includes(q) || teamName.includes(q);
-    });
-  }, [players, teamMap, search, onlyAvailable]);
+  const selectablePlayers = useMemo(() => {
+    return players
+      .filter((p) => {
+        if (onlyAvailable && p.status && p.status !== "a") {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (b.total_points || 0) - (a.total_points || 0));
+  }, [players, onlyAvailable]);
 
   const playerOptions = useMemo(() => {
-    return filteredPlayers.map((p) => {
+    return selectablePlayers.map((p) => {
       const team = teamMap.get(p.team);
       const teamShort = team?.short_name || team?.name || "UNK";
+      const name = `${p.first_name || ""} ${p.second_name || ""}`.trim() || p.web_name;
       return {
-        id: p.id,
-        name: `${p.first_name} ${p.second_name} (${teamShort})`,
+        id: String(p.id),
+        label: `${name} (${teamShort})`,
       };
     });
-  }, [filteredPlayers, teamMap]);
+  }, [selectablePlayers, teamMap]);
+
+  const optionByLabel = useMemo(() => {
+    const map = new Map();
+    playerOptions.forEach((o) => map.set(o.label.toLowerCase(), o.id));
+    return map;
+  }, [playerOptions]);
+
+  function onPlayerQueryChange(value) {
+    setPlayerQuery(value);
+    const matchedId = optionByLabel.get(value.trim().toLowerCase());
+    setPlayerId(matchedId || "");
+  }
 
   async function submit(e) {
     e.preventDefault();
     setErr("");
     setResult(null);
-    if (!playerId) {
-      setErr("Please select a player.");
+
+    const exactId = optionByLabel.get(playerQuery.trim().toLowerCase()) || playerId;
+    if (!exactId) {
+      setErr("Please pick a player from dropdown suggestions.");
       return;
     }
+
     setLoading(true);
     try {
       const payload = {
-        player_id: Number(playerId),
+        player_id: Number(exactId),
       };
       const res = await apiFetch("/api/predictions/player-points/", {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      setPlayerId(exactId);
       setResult(res);
     } catch (ex) {
       setErr(ex.message || "Prediction failed.");
@@ -98,14 +112,22 @@ export default function Predictions() {
         <div className="card">
           <div className="grid grid-3" style={{ marginBottom: "1rem" }}>
             <div className="form-group">
-              <label className="label">Search player</label>
+              <label className="label">Player</label>
               <input
                 className="input"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name or team..."
+                list="points-player-options"
+                value={playerQuery}
+                onChange={(e) => onPlayerQueryChange(e.target.value)}
+                placeholder="Search and select player..."
               />
+              <datalist id="points-player-options">
+                {playerOptions.map((o) => (
+                  <option key={o.id} value={o.label} />
+                ))}
+              </datalist>
+              <div className="form-helper">Type a player name and choose a suggestion</div>
             </div>
+
             <div className="form-group">
               <label className="label">Availability</label>
               <div className="pill-row">
@@ -125,6 +147,7 @@ export default function Predictions() {
                 </button>
               </div>
             </div>
+
             <div className="form-group" style={{ alignSelf: "end" }}>
               <button
                 className="btn btn-outline"
@@ -138,27 +161,10 @@ export default function Predictions() {
           </div>
 
           <div className="inline-note">
-            Showing {playerOptions.length} of {players.length} players
+            Available in picker: {playerOptions.length} players
           </div>
 
           <form className="grid grid-3" onSubmit={submit}>
-            <div className="form-group">
-              <label className="label">Player</label>
-              <select
-                className="input"
-                value={playerId}
-                onChange={(e) => setPlayerId(e.target.value)}
-                required
-              >
-                <option value="">Select player...</option>
-                {playerOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="form-group" style={{ alignSelf: "end" }}>
               <button className="btn btn-accent" type="submit" disabled={loading}>
                 {loading ? "Predicting..." : "Predict Points"}
