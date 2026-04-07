@@ -12,6 +12,11 @@ export function setRefreshToken(token) {
   else localStorage.removeItem("refreshToken");
 }
 
+export function clearSession() {
+  setToken(null);
+  setRefreshToken(null);
+}
+
 export function getToken() {
   const token = localStorage.getItem("accessToken");
   if (!token) {
@@ -27,33 +32,6 @@ export function getToken() {
 
 export function getRefreshToken() {
   return localStorage.getItem("refreshToken");
-}
-
-export function setSessionUser(user) {
-  if (user) localStorage.setItem("sessionUser", JSON.stringify(user));
-  else localStorage.removeItem("sessionUser");
-}
-
-export function getSessionUser() {
-  const raw = localStorage.getItem("sessionUser");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-export function clearSession() {
-  setToken(null);
-  setRefreshToken(null);
-  setSessionUser(null);
-}
-
-export function roleHomePath(role) {
-  if (role === "SuperAdmin") return "/superadmin/dashboard";
-  if (role === "Admin") return "/admin/dashboard";
-  return "/dashboard";
 }
 
 /* ================= CORE FETCH ================= */

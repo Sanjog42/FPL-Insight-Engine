@@ -1,16 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, clearSession, getSessionUser, getToken, roleHomePath, setSessionUser } from "../services/api";
+import { apiFetch, clearSession, getToken } from "../services/api";
 
 export default function useAuthGuard(allowedRoles = null) {
   const nav = useNavigate();
-  const [user, setUser] = useState(getSessionUser());
-
-  const normalizedRoles = useMemo(() => {
-    return Array.isArray(allowedRoles) ? allowedRoles : [];
-  }, [allowedRoles]);
-
-  const rolesKey = normalizedRoles.join("|");
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     const token = getToken();
@@ -23,18 +17,21 @@ export default function useAuthGuard(allowedRoles = null) {
     (async () => {
       try {
         const me = await apiFetch("/api/auth/me/");
-        setSessionUser(me);
         setUser(me);
 
-        if (normalizedRoles.length > 0 && !normalizedRoles.includes(me?.role)) {
-          nav(roleHomePath(me?.role));
+        if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
+          const role = String(me?.role || "").toLowerCase();
+          const allowed = allowedRoles.map((r) => String(r).toLowerCase());
+          if (!allowed.includes(role)) {
+            nav(role === "admin" || role === "superadmin" ? "/admin" : "/dashboard");
+          }
         }
       } catch {
         clearSession();
         nav("/login");
       }
     })();
-  }, [nav, rolesKey]);
+  }, [allowedRoles, nav]);
 
   return user;
 }

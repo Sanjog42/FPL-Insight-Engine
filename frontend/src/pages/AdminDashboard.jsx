@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   const [previewData, setPreviewData] = useState(null);
   const [workingAction, setWorkingAction] = useState("");
 
-  const isSuperAdmin = user?.role === "SuperAdmin";
+  const isSuperAdmin = String(user?.role || "").toLowerCase() === "superadmin";
 
   const visibleMenu = useMemo(() => MENU.filter((m) => !m.superOnly || isSuperAdmin), [isSuperAdmin]);
 
@@ -257,12 +257,12 @@ export default function AdminDashboard() {
   if (!user) return null;
 
   return (
-    <div className="container-fluid py-3">
+    <div className="container-fluid py-3" style={{ background: "linear-gradient(180deg,#f7f9fc,#ffffff)", minHeight: "100vh" }}>
       <div className="row g-3">
         <aside className="col-12 col-lg-2">
-          <div className="card shadow-sm">
+          <div className="card border-0 shadow-sm" style={{ borderRadius: "1rem" }}>
             <div className="card-body">
-              <h5 className="mb-3">Admin Panel</h5>
+              <h5 className="mb-3">Control Center</h5>
               <div className="list-group">
                 {visibleMenu.map((item) => (
                   <button
@@ -287,14 +287,14 @@ export default function AdminDashboard() {
 
           {active === "dashboard" && (
             <div className="row g-3">
-              <div className="col-md-3"><div className="card"><div className="card-body"><h6>Players</h6><h3>{players.length}</h3></div></div></div>
-              <div className="col-md-3"><div className="card"><div className="card-body"><h6>Teams</h6><h3>{teams.length}</h3></div></div></div>
-              <div className="col-md-3"><div className="card"><div className="card-body"><h6>Fixtures</h6><h3>{fixtures.length}</h3></div></div></div>
-              <div className="col-md-3"><div className="card"><div className="card-body"><h6>Predictions</h6><h3>{predictions.length}</h3></div></div></div>
+              <div className="col-md-3"><div className="card border-0 shadow-sm"><div className="card-body"><h6 className="text-muted">Players</h6><h3>{players.length}</h3></div></div></div>
+              <div className="col-md-3"><div className="card border-0 shadow-sm"><div className="card-body"><h6 className="text-muted">Teams</h6><h3>{teams.length}</h3></div></div></div>
+              <div className="col-md-3"><div className="card border-0 shadow-sm"><div className="card-body"><h6 className="text-muted">Fixtures</h6><h3>{fixtures.length}</h3></div></div></div>
+              <div className="col-md-3"><div className="card border-0 shadow-sm"><div className="card-body"><h6 className="text-muted">Predictions</h6><h3>{predictions.length}</h3></div></div></div>
 
               <div className="col-12">
-                <div className="card shadow-sm">
-                  <div className="card-header d-flex justify-content-between align-items-center">
+                <div className="card border-0 shadow-sm">
+                  <div className="card-header bg-white d-flex justify-content-between align-items-center">
                     <strong>Model Workflow</strong>
                     <div className="d-flex gap-2">
                       <button className="btn btn-primary btn-sm" onClick={runRetrain} disabled={workingAction === "retrain"}>
@@ -313,7 +313,7 @@ export default function AdminDashboard() {
 
                     <h6>Drafts</h6>
                     <div className="table-responsive">
-                      <table className="table table-sm table-striped">
+                      <table className="table table-sm table-striped align-middle">
                         <thead><tr><th>ID</th><th>Name</th><th>Trained</th><th></th></tr></thead>
                         <tbody>
                           {(workflow.drafts || []).map((d) => (
@@ -377,13 +377,13 @@ export default function AdminDashboard() {
           )}
 
           {active === "players" && (
-            <div className="card shadow-sm">
-              <div className="card-header d-flex justify-content-between align-items-center">
+            <div className="card border-0 shadow-sm">
+              <div className="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>Players</strong>
                 <button className="btn btn-primary btn-sm" onClick={createPlayer}>Add Player</button>
               </div>
               <div className="table-responsive">
-                <table className="table table-striped mb-0">
+                <table className="table table-striped mb-0 align-middle">
                   <thead><tr><th>ID</th><th>Name</th><th>Team</th><th>Pos</th><th>Price</th><th></th></tr></thead>
                   <tbody>
                     {players.map((p) => (
@@ -402,13 +402,13 @@ export default function AdminDashboard() {
           )}
 
           {active === "teams" && (
-            <div className="card shadow-sm">
-              <div className="card-header d-flex justify-content-between align-items-center">
+            <div className="card border-0 shadow-sm">
+              <div className="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>Teams</strong>
                 <button className="btn btn-primary btn-sm" onClick={createTeam}>Add Team</button>
               </div>
               <div className="table-responsive">
-                <table className="table table-striped mb-0">
+                <table className="table table-striped mb-0 align-middle">
                   <thead><tr><th>ID</th><th>Name</th><th>Short</th><th>Attack</th><th>Defense</th><th></th></tr></thead>
                   <tbody>
                     {teams.map((t) => (
@@ -427,13 +427,13 @@ export default function AdminDashboard() {
           )}
 
           {active === "fixtures" && (
-            <div className="card shadow-sm">
-              <div className="card-header d-flex justify-content-between align-items-center">
+            <div className="card border-0 shadow-sm">
+              <div className="card-header bg-white d-flex justify-content-between align-items-center">
                 <strong>Fixtures</strong>
                 <button className="btn btn-primary btn-sm" onClick={createFixture}>Add Fixture</button>
               </div>
               <div className="table-responsive">
-                <table className="table table-striped mb-0">
+                <table className="table table-striped mb-0 align-middle">
                   <thead><tr><th>ID</th><th>GW</th><th>Match</th><th>Kickoff</th><th></th></tr></thead>
                   <tbody>
                     {fixtures.map((f) => (
@@ -456,10 +456,10 @@ export default function AdminDashboard() {
           )}
 
           {active === "predictions" && (
-            <div className="card shadow-sm">
-              <div className="card-header"><strong>Predictions</strong></div>
+            <div className="card border-0 shadow-sm">
+              <div className="card-header bg-white"><strong>Predictions</strong></div>
               <div className="table-responsive">
-                <table className="table table-striped mb-0">
+                <table className="table table-striped mb-0 align-middle">
                   <thead><tr><th>ID</th><th>Fixture</th><th>xG</th><th>Outcome</th><th>Confidence</th><th>By</th></tr></thead>
                   <tbody>
                     {predictions.map((p) => (
@@ -479,10 +479,10 @@ export default function AdminDashboard() {
           )}
 
           {active === "users" && isSuperAdmin && (
-            <div className="card shadow-sm">
-              <div className="card-header"><strong>User Management</strong></div>
+            <div className="card border-0 shadow-sm">
+              <div className="card-header bg-white"><strong>User Management</strong></div>
               <div className="table-responsive">
-                <table className="table table-striped mb-0">
+                <table className="table table-striped mb-0 align-middle">
                   <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead>
                   <tbody>
                     {users.map((u) => (
@@ -490,7 +490,11 @@ export default function AdminDashboard() {
                         <td>{u.id}</td>
                         <td>{u.username}</td>
                         <td>{u.email || "-"}</td>
-                        <td>{u.role}</td>
+                        <td>
+                          <span className={`badge ${u.role === "SuperAdmin" ? "text-bg-dark" : u.role === "Admin" ? "text-bg-primary" : "text-bg-secondary"}`}>
+                            {u.role}
+                          </span>
+                        </td>
                         <td className="text-end">
                           {u.role !== "SuperAdmin" && (
                             <>
