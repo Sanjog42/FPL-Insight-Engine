@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { apiFetch, setToken, setRefreshToken, getToken } from "../services/api";
+import { apiFetch, clearSession, getToken } from "../services/api";
 
 export default function Dashboard() {
   const nav = useNavigate();
@@ -65,7 +65,7 @@ export default function Dashboard() {
         setTransfers(freeTransfers);
         setHasTeamStored(stored?.teamStored === true);
       } catch {
-        setToken(null);
+        clearSession();
         nav("/login");
       }
     })();
@@ -219,8 +219,7 @@ export default function Dashboard() {
   }
 
   function logout() {
-    setToken(null);
-    setRefreshToken(null);
+    clearSession();
     nav("/login");
   }
 
@@ -480,6 +479,9 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+
 
 
 

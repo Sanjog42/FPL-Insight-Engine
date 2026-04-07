@@ -29,6 +29,33 @@ export function getRefreshToken() {
   return localStorage.getItem("refreshToken");
 }
 
+export function setSessionUser(user) {
+  if (user) localStorage.setItem("sessionUser", JSON.stringify(user));
+  else localStorage.removeItem("sessionUser");
+}
+
+export function getSessionUser() {
+  const raw = localStorage.getItem("sessionUser");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function clearSession() {
+  setToken(null);
+  setRefreshToken(null);
+  setSessionUser(null);
+}
+
+export function roleHomePath(role) {
+  if (role === "SuperAdmin") return "/superadmin/dashboard";
+  if (role === "Admin") return "/admin/dashboard";
+  return "/dashboard";
+}
+
 /* ================= CORE FETCH ================= */
 
 export async function apiFetch(path, options = {}, retry = true) {
@@ -50,17 +77,14 @@ export async function apiFetch(path, options = {}, retry = true) {
     ?.includes("application/json");
   const data = isJson ? await res.json() : null;
 
-  /* ---------- HANDLE 401 (TOKEN EXPIRED) ---------- */
   if (res.status === 401 && retry) {
     const refresh = getRefreshToken();
 
-  if (!refresh) {
-    setToken(null);
-    setRefreshToken(null);
-    throw new Error("Session expired. Please login again.");
-  }
+    if (!refresh) {
+      clearSession();
+      throw new Error("Session expired. Please login again.");
+    }
 
-    // Try refresh
     const refreshRes = await fetch(`${API_BASE}/api/auth/refresh/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -68,19 +92,16 @@ export async function apiFetch(path, options = {}, retry = true) {
     });
 
     if (!refreshRes.ok) {
-      setToken(null);
-      setRefreshToken(null);
+      clearSession();
       throw new Error("Session expired. Please login again.");
     }
 
     const refreshData = await refreshRes.json();
     setToken(refreshData.access);
 
-    // Retry original request ONCE
     return apiFetch(path, options, false);
   }
 
-  /* ---------- OTHER ERRORS ---------- */
   if (!res.ok) {
     const msg =
       data?.detail ||

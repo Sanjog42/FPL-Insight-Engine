@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { apiFetch, setToken, setRefreshToken } from "../services/api";
+import { apiFetch, clearSession } from "../services/api";
 
 export default function AppLayout({ title, subtitle, children }) {
   const nav = useNavigate();
@@ -22,23 +22,22 @@ export default function AppLayout({ title, subtitle, children }) {
   }, []);
 
   function logout() {
-    setToken(null);
-    setRefreshToken(null);
+    clearSession();
     nav("/login");
   }
 
   const displayName = user?.full_name?.trim() || user?.username || "User";
-  const initials = displayName
-    .split(" ")
-    .filter(Boolean)
-    .map((p) => p[0]?.toUpperCase())
-    .slice(0, 2)
-    .join("") || "U";
+  const initials =
+    displayName
+      .split(" ")
+      .filter(Boolean)
+      .map((p) => p[0]?.toUpperCase())
+      .slice(0, 2)
+      .join("") || "U";
 
   return (
     <div className="app">
       <main className="content dashboard-shell">
-        {/* Header (same as Dashboard) */}
         <header className="page-header">
           <div className="page-title">
             <span className="page-title-accent">FPL</span> Insight Engine
@@ -59,7 +58,6 @@ export default function AppLayout({ title, subtitle, children }) {
           </div>
         </header>
 
-        {/* Page intro */}
         <section className="section">
           <h1 className="h1">{title}</h1>
           {subtitle && <p className="text-muted">{subtitle}</p>}

@@ -1,25 +1,49 @@
-from rest_framework import status
+from decimal import Decimal
+
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import status, viewsets
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import IsAdminOrSuperAdmin, IsUserOrAbove
+
+from .models import Fixture, ModelTrainingJob, ModelVersion, Player, PredictionRecord, Team
 from .serializers import (
     FDRQuerySerializer,
+    FixtureSerializer,
     FullTeamGenerateRequestSerializer,
     MatchRequestSerializer,
+    ModelTrainingJobSerializer,
+    ModelVersionSerializer,
     PlayerPointsRequestSerializer,
+    PlayerSerializer,
+    PredictionRecordSerializer,
     PriceRequestSerializer,
+    TeamSerializer,
     TransferSuggestRequestSerializer,
 )
 from .services.fpl_client import FPLServiceUnavailable, get_bootstrap, get_fixtures
+from .services.model_runtime import (
+    apply_model_to_captaincy,
+    apply_model_to_match_prediction,
+    apply_model_to_player_points,
+    apply_model_to_price,
+    get_active_model_version,
+)
+from .services.model_training import run_retrain_job
 from .services.predictors import (
+    _find_team,
+    _get_next_gw,
+    _predict_match_ml,
+    predict_captaincy_top_picks,
     predict_fdr,
     predict_match,
     predict_player_points,
     predict_price_change,
     predict_upcoming_matches,
-    predict_captaincy_top_picks,
 )
 from .services.team_optimizer import generate_full_team, suggest_transfers
 
@@ -72,7 +96,7 @@ class FixturesView(APIView):
 
 
 class PlayerPointsPredictView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def post(self, request):
         serializer = PlayerPointsRequestSerializer(data=request.data)
@@ -87,11 +111,12 @@ class PlayerPointsPredictView(APIView):
             raise NotFound("Unknown player_id")
         except Exception as exc:
             _handle_fpl_error(exc)
+        result = apply_model_to_player_points(result, get_active_model_version())
         return Response(result)
 
 
 class PricePredictView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def post(self, request):
         serializer = PriceRequestSerializer(data=request.data)
@@ -103,11 +128,12 @@ class PricePredictView(APIView):
             raise NotFound("Unknown player_id")
         except Exception as exc:
             _handle_fpl_error(exc)
+        result = apply_model_to_price(result, get_active_model_version())
         return Response(result)
 
 
 class MatchPredictView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def post(self, request):
         serializer = MatchRequestSerializer(data=request.data)
@@ -119,11 +145,12 @@ class MatchPredictView(APIView):
             raise NotFound("Unknown team_id")
         except Exception as exc:
             _handle_fpl_error(exc)
+        result = apply_model_to_match_prediction(result, get_active_model_version())
         return Response(result)
 
 
 class FDRView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def get(self, request):
         serializer = FDRQuerySerializer(data=request.query_params)
@@ -135,23 +162,28 @@ class FDRView(APIView):
             raise NotFound("Unknown team_id")
         except Exception as exc:
             _handle_fpl_error(exc)
+        result["model_version"] = get_active_model_version().name if get_active_model_version() else "base"
         return Response(result)
 
 
 class UpcomingMatchPredictView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def get(self, request):
         try:
             result = predict_upcoming_matches()
         except Exception as exc:
             _handle_fpl_error(exc)
+
+        version = get_active_model_version()
+        for fixture in result.get("fixtures", []):
+            fixture["prediction"] = apply_model_to_match_prediction(fixture.get("prediction") or {}, version)
+        result["model_version"] = version.name if version else "base"
         return Response(result)
 
 
-
 class CaptaincyTopPicksView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def get(self, request):
         limit_param = request.query_params.get("limit")
@@ -169,10 +201,12 @@ class CaptaincyTopPicksView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
+        result = apply_model_to_captaincy(result, get_active_model_version())
         return Response(result)
 
+
 class TransferSuggestView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def post(self, request):
         serializer = TransferSuggestRequestSerializer(data=request.data)
@@ -192,11 +226,12 @@ class TransferSuggestView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
+        result["model_version"] = get_active_model_version().name if get_active_model_version() else "base"
         return Response(result)
 
 
 class FullTeamGenerateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def post(self, request):
         serializer = FullTeamGenerateRequestSerializer(data=request.data)
@@ -210,5 +245,235 @@ class FullTeamGenerateView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
+        result["model_version"] = get_active_model_version().name if get_active_model_version() else "base"
         return Response(result)
 
+
+class TeamAdminViewSet(viewsets.ModelViewSet):
+    queryset = Team.objects.all().order_by("name")
+    serializer_class = TeamSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+
+class PlayerAdminViewSet(viewsets.ModelViewSet):
+    queryset = Player.objects.select_related("team").all().order_by("name")
+    serializer_class = PlayerSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+
+class FixtureAdminViewSet(viewsets.ModelViewSet):
+    queryset = Fixture.objects.select_related("home_team", "away_team").all().order_by("-kickoff_at")
+    serializer_class = FixtureSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+
+class PredictionAdminViewSet(viewsets.ModelViewSet):
+    queryset = PredictionRecord.objects.select_related(
+        "fixture",
+        "fixture__home_team",
+        "fixture__away_team",
+        "created_by",
+    ).all()
+    serializer_class = PredictionRecordSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+def _compute_prediction(home_team: Team, away_team: Team):
+    home_score = max(0.2, (home_team.attack_strength + away_team.defense_strength * 0.4) / 60)
+    away_score = max(0.2, (away_team.attack_strength + home_team.defense_strength * 0.4) / 65)
+
+    if home_score > away_score + 0.3:
+        outcome = "Home"
+    elif away_score > home_score + 0.3:
+        outcome = "Away"
+    else:
+        outcome = "Draw"
+
+    confidence = min(0.95, 0.5 + abs(home_score - away_score) / 4)
+    return {
+        "predicted_home_goals": round(home_score, 2),
+        "predicted_away_goals": round(away_score, 2),
+        "outcome": outcome,
+        "confidence": round(confidence * 100, 2),
+    }
+
+
+class RunMatchPredictionView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def post(self, request):
+        fixture_id = request.data.get("fixture_id")
+        if not fixture_id:
+            return Response(
+                {"detail": "fixture_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            fixture = Fixture.objects.select_related("home_team", "away_team").get(pk=fixture_id)
+        except Fixture.DoesNotExist:
+            return Response(
+                {"detail": "Fixture not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        prediction_data = _compute_prediction(fixture.home_team, fixture.away_team)
+        record = PredictionRecord.objects.create(
+            fixture=fixture,
+            predicted_home_goals=Decimal(str(prediction_data["predicted_home_goals"])),
+            predicted_away_goals=Decimal(str(prediction_data["predicted_away_goals"])),
+            outcome=prediction_data["outcome"],
+            confidence=Decimal(str(prediction_data["confidence"])),
+            created_by=request.user,
+        )
+
+        return Response(PredictionRecordSerializer(record).data, status=status.HTTP_201_CREATED)
+
+
+class RetrainModelView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def post(self, request):
+        try:
+            job, version = run_retrain_job(request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            _handle_fpl_error(exc)
+
+        return Response(
+            {
+                "message": "Retrain complete. Draft model created.",
+                "job": ModelTrainingJobSerializer(job).data,
+                "draft": ModelVersionSerializer(version).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ModelWorkflowView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def get(self, request):
+        drafts = ModelVersion.objects.filter(status=ModelVersion.Status.DRAFT).order_by("-trained_at")[:10]
+        published = ModelVersion.objects.filter(status=ModelVersion.Status.PUBLISHED).order_by("-published_at", "-trained_at")[:20]
+        jobs = ModelTrainingJob.objects.select_related("model_version", "triggered_by").all()[:15]
+        active = get_active_model_version()
+
+        return Response(
+            {
+                "active": ModelVersionSerializer(active).data if active else None,
+                "drafts": ModelVersionSerializer(drafts, many=True).data,
+                "published": ModelVersionSerializer(published, many=True).data,
+                "jobs": ModelTrainingJobSerializer(jobs, many=True).data,
+            }
+        )
+
+
+class PreviewDraftView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def get(self, request, id):
+        try:
+            draft = ModelVersion.objects.get(pk=id, status=ModelVersion.Status.DRAFT)
+        except ModelVersion.DoesNotExist:
+            return Response({"detail": "Draft not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        bootstrap, _ = get_bootstrap()
+        fixtures, _ = get_fixtures()
+        teams = bootstrap.get("teams", [])
+        events = bootstrap.get("events", [])
+        next_gw = _get_next_gw(events) or 1
+
+        upcoming = [f for f in fixtures if f.get("event") == next_gw][:6]
+        active = get_active_model_version()
+
+        comparison = []
+        for fixture in upcoming:
+            home = _find_team(teams, fixture.get("team_h"))
+            away = _find_team(teams, fixture.get("team_a"))
+            if not home or not away:
+                continue
+
+            baseline = _predict_match_ml(home, away, teams, fixtures)
+            current_pred = apply_model_to_match_prediction(dict(baseline), active)
+            draft_pred = apply_model_to_match_prediction(dict(baseline), draft)
+
+            comparison.append(
+                {
+                    "fixture_id": fixture.get("id"),
+                    "home_team": home.get("name"),
+                    "away_team": away.get("name"),
+                    "current": current_pred,
+                    "draft": draft_pred,
+                }
+            )
+
+        return Response(
+            {
+                "draft": ModelVersionSerializer(draft).data,
+                "active": ModelVersionSerializer(active).data if active else None,
+                "gameweek": next_gw,
+                "comparison": comparison,
+            }
+        )
+
+
+class PublishDraftView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def post(self, request, id):
+        try:
+            draft = ModelVersion.objects.get(pk=id, status=ModelVersion.Status.DRAFT)
+        except ModelVersion.DoesNotExist:
+            return Response({"detail": "Draft not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            ModelVersion.objects.filter(is_active=True).update(is_active=False)
+            draft.status = ModelVersion.Status.PUBLISHED
+            draft.is_active = True
+            draft.published_at = timezone.now()
+            draft.save(update_fields=["status", "is_active", "published_at"])
+
+        return Response(
+            {
+                "message": "Draft published successfully",
+                "active": ModelVersionSerializer(draft).data,
+            }
+        )
+
+
+class RollbackModelView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
+
+    def post(self, request):
+        current_active = get_active_model_version()
+        if not current_active:
+            return Response({"detail": "No active model to rollback"}, status=status.HTTP_400_BAD_REQUEST)
+
+        previous = (
+            ModelVersion.objects.filter(status=ModelVersion.Status.PUBLISHED)
+            .exclude(id=current_active.id)
+            .order_by("-published_at", "-trained_at")
+            .first()
+        )
+        if not previous:
+            return Response({"detail": "No previous published model found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            current_active.is_active = False
+            current_active.save(update_fields=["is_active"])
+
+            previous.is_active = True
+            previous.save(update_fields=["is_active"])
+
+        return Response(
+            {
+                "message": "Rollback successful",
+                "active": ModelVersionSerializer(previous).data,
+                "rolled_back_from": ModelVersionSerializer(current_active).data,
+            }
+        )

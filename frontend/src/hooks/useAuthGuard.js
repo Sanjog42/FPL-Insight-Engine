@@ -1,25 +1,40 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiFetch, getToken, setToken, setRefreshToken } from "../services/api";
+import { apiFetch, clearSession, getSessionUser, getToken, roleHomePath, setSessionUser } from "../services/api";
 
-export default function useAuthGuard() {
+export default function useAuthGuard(allowedRoles = null) {
   const nav = useNavigate();
+  const [user, setUser] = useState(getSessionUser());
+
+  const normalizedRoles = useMemo(() => {
+    return Array.isArray(allowedRoles) ? allowedRoles : [];
+  }, [allowedRoles]);
+
+  const rolesKey = normalizedRoles.join("|");
 
   useEffect(() => {
     const token = getToken();
     if (!token) {
+      clearSession();
       nav("/login");
       return;
     }
 
     (async () => {
       try {
-        await apiFetch("/api/auth/me/");
+        const me = await apiFetch("/api/auth/me/");
+        setSessionUser(me);
+        setUser(me);
+
+        if (normalizedRoles.length > 0 && !normalizedRoles.includes(me?.role)) {
+          nav(roleHomePath(me?.role));
+        }
       } catch {
-        setToken(null);
-        setRefreshToken(null);
+        clearSession();
         nav("/login");
       }
     })();
-  }, [nav]);
+  }, [nav, rolesKey]);
+
+  return user;
 }

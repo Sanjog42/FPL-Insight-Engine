@@ -1,10 +1,10 @@
 import { Link, useNavigate } from "react-router-dom";
-import { apiFetch, setToken, setRefreshToken } from "../services/api";
 import { useState } from "react";
+import { apiFetch, roleHomePath, setRefreshToken, setSessionUser, setToken } from "../services/api";
 
 export default function Login() {
   const nav = useNavigate();
-  const [identifier, setIdentifier] = useState(""); // username (or email if backend supports it)
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,153 +15,67 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // ✅ SimpleJWT expects: { username, password }
-      const tokenData = await apiFetch("/api/auth/login/", {
+      const data = await apiFetch("/api/auth/login/", {
         method: "POST",
         body: JSON.stringify({
-          username: identifier.trim(),
+          username: username.trim(),
           password,
         }),
       });
 
-      // ✅ Store tokens consistently with your api.js helpers
-      setToken(tokenData.access); // saves to localStorage "accessToken"
-      if (tokenData.refresh) {
-        setRefreshToken(tokenData.refresh);
-      }
-
-      // ✅ Fetch current user
-      const me = await apiFetch("/api/auth/me/");
-
-      // ✅ Route by role (fallback to dashboard)
-      if (me?.role === "admin" || me?.is_staff === true) nav("/admin");
-      else nav("/dashboard");
+      setToken(data.token);
+      if (data.refresh) setRefreshToken(data.refresh);
+      setSessionUser({ username: data.username, role: data.role });
+      nav(roleHomePath(data.role));
     } catch (ex) {
-      setErr(ex?.message || "Login failed. Please check username/password.");
+      setErr(ex?.message || "Login failed. Please check credentials.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="app auth-page">
-      <div className="auth-background"></div>
+    <div className="container py-5" style={{ maxWidth: 520 }}>
+      <h2 className="mb-2">FPL Insight Engine</h2>
+      <p className="text-muted mb-4">Sign in with your account.</p>
 
-      <header className="navbar">
-        <div className="navbar-title">⚽ FPL Insight Engine</div>
-        <div className="navbar-actions">
-          <a
-            href="#"
-            className="btn btn-outline"
-            onClick={(e) => e.preventDefault()}
-          >
-            Home
-          </a>
-          <Link to="/register" className="btn btn-accent">
-            Register
-          </Link>
-        </div>
-      </header>
+      <div className="card shadow-sm">
+        <div className="card-body p-4">
+          {err ? <div className="alert alert-danger">{err}</div> : null}
 
-      <main className="auth-container">
-        <div className="auth-wrapper">
-          <div className="auth-visual">
-            <div className="auth-visual-content">
-              <div className="football-icon">⚽</div>
-              <h1 className="auth-title">Welcome Back!</h1>
-              <p className="auth-subtitle">
-                Sign in as a user or administrator. The system will automatically
-                route you to the correct dashboard.
-              </p>
-              <div className="auth-features">
-                <div className="auth-feature-item">
-                  <span className="feature-icon">👤</span>
-                  <span>User: Access analytics dashboard</span>
-                </div>
-                <div className="auth-feature-item">
-                  <span className="feature-icon">🔐</span>
-                  <span>Admin: Manage system & users</span>
-                </div>
-                <div className="auth-feature-item">
-                  <span className="feature-icon">📊</span>
-                  <span>Same login page for both roles</span>
-                </div>
-              </div>
+          <form onSubmit={onSubmit}>
+            <div className="mb-3">
+              <label className="form-label">Username</label>
+              <input
+                type="text"
+                className="form-control"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
             </div>
-          </div>
 
-          <div className="auth-form-container">
-            <div className="auth-form-card">
-              <div className="auth-form-header">
-                <h2 className="h2">Login</h2>
-                <p className="text-muted">
-                  Sign in to your FPL Insight account (User or Admin)
-                </p>
-              </div>
-
-              {err ? (
-                <p style={{ color: "#ef4444", marginTop: 0 }}>{err}</p>
-              ) : null}
-
-              <form className="auth-form" onSubmit={onSubmit}>
-                <div className="form-group">
-                  <label className="label">
-                    <span>📧</span> Email / Username
-                  </label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="label">
-                    <span>🔒</span> Password
-                  </label>
-                  <input
-                    type="password"
-                    className="input"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  <div className="form-helper">
-                    <a
-                      href="#"
-                      className="text-accent"
-                      style={{ fontSize: "0.85rem" }}
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      Forgot password?
-                    </a>
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ marginTop: "1.5rem" }}>
-                  <button
-                    type="submit"
-                    className="btn btn-accent"
-                    style={{ width: "100%", fontSize: "1rem", padding: "0.85rem" }}
-                    disabled={loading}
-                  >
-                    {loading ? "Logging in..." : "🚀 Login"}
-                  </button>
-                </div>
-              </form>
-
-              <p className="auth-footer">
-                <span className="text-muted">New to FPL Insight?</span>{" "}
-                <Link to="/register" className="text-accent">
-                  Create your account →
-                </Link>
-              </p>
+            <div className="mb-3">
+              <label className="form-label">Password</label>
+              <input
+                type="password"
+                className="form-control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
             </div>
-          </div>
+
+            <button className="btn btn-primary w-100" type="submit" disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </button>
+          </form>
+
+          <p className="mt-3 mb-0 text-muted">
+            No account? <Link to="/register">Register</Link>
+          </p>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
