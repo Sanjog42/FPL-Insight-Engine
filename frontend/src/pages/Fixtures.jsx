@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import useAuthGuard from "../hooks/useAuthGuard";
-import AppLayout from "../components/AppLayout";
+import AppLayout from "../layouts/AppLayout";
 import { apiFetch } from "../services/api";
 
 export default function Fixtures() {
@@ -115,3 +115,4 @@ export default function Fixtures() {
     </AppLayout>
   );
 }
+

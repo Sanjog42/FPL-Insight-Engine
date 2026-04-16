@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import useAuthGuard from "../hooks/useAuthGuard";
-import AppLayout from "../components/AppLayout";
+import AppLayout from "../layouts/AppLayout";
 import { apiFetch } from "../services/api";
 
 export default function MatchPrediction() {
@@ -33,8 +33,12 @@ export default function MatchPrediction() {
       setLoadingUpcoming(true);
       try {
         const res = await apiFetch("/api/predictions/match-upcoming/");
-        setUpcoming(res?.fixtures || []);
-        setUpcomingGw(res?.gameweek || null);
+        const gw = res?.gameweek ?? null;
+        const fixtures = Array.isArray(res?.fixtures) ? res.fixtures : [];
+        const sameGwFixtures =
+          gw == null ? fixtures : fixtures.filter((fixture) => fixture?.event === gw);
+        setUpcoming(sameGwFixtures);
+        setUpcomingGw(gw);
       } catch (ex) {
         setErr(ex.message || "Failed to load upcoming predictions.");
       } finally {
@@ -240,3 +244,4 @@ export default function MatchPrediction() {
     </AppLayout>
   );
 }
+

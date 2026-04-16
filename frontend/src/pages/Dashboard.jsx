@@ -1,14 +1,48 @@
-import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { apiFetch, setToken, setRefreshToken, getToken } from "../services/api";
+import PredictionCard from "../components/dashboard/PredictionCard";
+import PlayerCard from "../components/dashboard/PlayerCard";
+import StatCard from "../components/dashboard/StatCard";
+import MainLayout from "../layouts/MainLayout";
+import { getBootstrap, getCaptaincy, getMatchUpcoming } from "../services/predictionService";
+import { getCurrentUser } from "../services/userService";
+
+function formatTimeLeft(target) {
+  if (!target) return "";
+  const diffMs = target - Date.now();
+  if (diffMs <= 0) return "Deadline passed";
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  const dayPart = days > 0 ? `${days}d ` : "";
+  const hourPart = `${hours}h`.padStart(3, "0");
+  const minPart = `${minutes}m`.padStart(3, "0");
+  return `DL in ${dayPart}${hourPart} ${minPart}`;
+}
+
+function formatLocalDeadline(target) {
+  if (!target) return "Deadline unavailable";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(target));
+}
+
+function positionLabel(position) {
+  if (position === 1) return "GK";
+  if (position === 2) return "DEF";
+  if (position === 3) return "MID";
+  if (position === 4) return "FWD";
+  return "-";
+}
 
 export default function Dashboard() {
-  const nav = useNavigate();
   const [budget, setBudget] = useState(0.0);
   const [transfers, setTransfers] = useState(0);
-  const [user, setUser] = useState(null);
   const [hasTeamStored, setHasTeamStored] = useState(false);
-  const [teamStorageKey, setTeamStorageKey] = useState(null);
   const [currentGw, setCurrentGw] = useState(null);
   const [deadlineTime, setDeadlineTime] = useState(null);
   const [timeLeft, setTimeLeft] = useState("");
@@ -16,117 +50,86 @@ export default function Dashboard() {
   const [playerPreview, setPlayerPreview] = useState(null);
   const [matchPreview, setMatchPreview] = useState(null);
 
-  function formatTimeLeft(target) {
-    if (!target) return "";
-    const diffMs = target - Date.now();
-    if (diffMs <= 0) return "Deadline passed";
-    const totalMinutes = Math.floor(diffMs / 60000);
-    const days = Math.floor(totalMinutes / (60 * 24));
-    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-    const minutes = totalMinutes % 60;
-    const dayPart = days > 0 ? `${days}d ` : "";
-    const hourPart = `${hours}h`.padStart(3, "0");
-    const minPart = `${minutes}m`.padStart(3, "0");
-    return `DL in ${dayPart}${hourPart} ${minPart}`;
-  }
-
-  function formatLocalDeadline(target) {
-    if (!target) return "Deadline unavailable";
-    return new Intl.DateTimeFormat(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(target));
-  }
-
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      nav("/login");
-      return;
-    }
+    let active = true;
 
-    (async () => {
+    async function loadTeamState() {
       try {
-        const me = await apiFetch("/api/auth/me/");
-        setUser(me);
+        const me = await getCurrentUser();
+        if (!active) return;
 
         const userId = Number(me?.id || 0);
         const key = userId > 0 ? `fplTeamState:user:${userId}` : null;
-        setTeamStorageKey(key);
-
         const stored = key ? JSON.parse(localStorage.getItem(key) || "{}") : {};
-        const remainingBudget = typeof stored.remainingBudget === "number" ? stored.remainingBudget : 0;
-        const freeTransfers = typeof stored.freeTransfers === "number" ? stored.freeTransfers : 0;
 
-        setBudget(remainingBudget);
-        setTransfers(freeTransfers);
+        setBudget(typeof stored.remainingBudget === "number" ? stored.remainingBudget : 0);
+        setTransfers(typeof stored.freeTransfers === "number" ? stored.freeTransfers : 0);
         setHasTeamStored(stored?.teamStored === true);
       } catch {
-        setToken(null);
-        nav("/login");
+        if (!active) return;
+        setHasTeamStored(false);
       }
-    })();
-  }, [nav]);
+    }
+
+    loadTeamState();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
-    const controller = new AbortController();
 
     async function loadBootstrap() {
       try {
-        const res = await apiFetch("/api/fpl/bootstrap/", { signal: controller.signal });
+        const res = await getBootstrap(false);
         const events = res?.data?.events || [];
-        const next = events.find((e) => e.is_next);
-        if (!next) return;
+        const next = events.find((event) => event.is_next);
+        if (!next || !active) return;
+
         const deadline = next.deadline_time ? new Date(next.deadline_time).getTime() : null;
-        if (active) {
-          setCurrentGw(next.id ?? null);
-          setDeadlineTime(deadline);
-        }
+        setCurrentGw(next.id ?? null);
+        setDeadlineTime(deadline);
       } catch {
-        // ignore bootstrap errors; keep fallback UI
+        // Keep fallback UI.
       }
     }
 
     loadBootstrap();
 
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       if (!deadlineTime) return;
       setTimeLeft(formatTimeLeft(deadlineTime));
-    }, 30 * 1000);
+    }, 30000);
 
-    return () => {
-      active = false;
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, [deadlineTime]);
-
-  useEffect(() => {
     setTimeLeft(formatTimeLeft(deadlineTime));
-  }, [deadlineTime]);
 
+    return () => clearInterval(timer);
+  }, [deadlineTime]);
 
   useEffect(() => {
     let active = true;
 
     async function loadCaptainPreview() {
       try {
-        const res = await apiFetch("/api/predictions/captaincy/?limit=20");
+        const res = await getCaptaincy(20);
         if (!active) return;
+
         const picks = Array.isArray(res?.picks) ? res.picks : [];
         const top = picks[0] || null;
-        const topByPoints = picks.reduce((best, p) => {
-          if (!best) return p;
-          return (p?.predicted_points || 0) > (best?.predicted_points || 0) ? p : best;
+        const topByPoints = picks.reduce((best, pick) => {
+          if (!best) return pick;
+          return (pick?.predicted_points || 0) > (best?.predicted_points || 0) ? pick : best;
         }, null);
 
         if (top) {
           setCaptainPreview({
-            gameweek: res?.gameweek,
             name: top.name,
             team: top.team,
             position: top.position,
@@ -137,7 +140,6 @@ export default function Dashboard() {
 
         if (topByPoints) {
           setPlayerPreview({
-            gameweek: res?.gameweek,
             name: topByPoints.name,
             team: topByPoints.team,
             position: topByPoints.position,
@@ -146,12 +148,11 @@ export default function Dashboard() {
           });
         }
       } catch {
-        // keep static fallback if captaincy endpoint is unavailable
+        // Keep fallback UI.
       }
     }
 
     loadCaptainPreview();
-
     return () => {
       active = false;
     };
@@ -162,25 +163,23 @@ export default function Dashboard() {
 
     async function loadMatchPreview() {
       try {
-        const res = await apiFetch("/api/predictions/match-upcoming/");
+        const res = await getMatchUpcoming();
         if (!active) return;
 
         const fixtures = Array.isArray(res?.fixtures) ? res.fixtures : [];
         if (!fixtures.length) return;
 
-        const best = fixtures.reduce((top, fx) => {
-          const p = fx?.prediction?.probs || {};
-          const conf = Math.max(Number(p.home || 0), Number(p.draw || 0), Number(p.away || 0));
-          if (!top || conf > top.confidence) {
-            return {
-              fixture: fx,
-              confidence: conf,
-            };
+        const best = fixtures.reduce((top, fixture) => {
+          const probs = fixture?.prediction?.probs || {};
+          const confidence = Math.max(Number(probs.home || 0), Number(probs.draw || 0), Number(probs.away || 0));
+          if (!top || confidence > top.confidence) {
+            return { fixture, confidence };
           }
           return top;
         }, null);
 
         if (!best?.fixture) return;
+
         setMatchPreview({
           gw: res?.gameweek,
           home: best.fixture?.home_team?.name || "Home",
@@ -191,310 +190,84 @@ export default function Dashboard() {
           confidence: best.confidence,
         });
       } catch {
-        // keep static fallback if upcoming match endpoint is unavailable
+        // Keep fallback UI.
       }
     }
 
     loadMatchPreview();
-
     return () => {
       active = false;
     };
   }, []);
-  function simulateNewGameweek() {
-    if (!teamStorageKey) {
-      alert("No user-specific team data found.");
-      return;
-    }
-
-    const stored = JSON.parse(localStorage.getItem(teamStorageKey) || "{}");
-    let freeTransfers = typeof stored.freeTransfers === "number" ? stored.freeTransfers : 0;
-
-    freeTransfers = Math.min(freeTransfers + 1, 2);
-    stored.freeTransfers = freeTransfers;
-    localStorage.setItem(teamStorageKey, JSON.stringify(stored));
-
-    setTransfers(freeTransfers);
-    alert("New gameweek simulated (mock): free transfers now = " + freeTransfers);
-  }
-
-  function logout() {
-    setToken(null);
-    setRefreshToken(null);
-    nav("/login");
-  }
-
-  const displayName = user?.full_name?.trim() || user?.username || "User";
-  const initials = displayName
-    .split(" ")
-    .filter(Boolean)
-    .map((p) => p[0]?.toUpperCase())
-    .slice(0, 2)
-    .join("") || "U";
 
   return (
-    <div className="app">
-      <main className="content dashboard-shell">
-        {/* Header */}
-        <header className="page-header">
-          <div className="page-title">
-            <span className="page-title-accent">FPL</span> Insight Engine
-          </div>
+    <MainLayout
+      title="Manager Dashboard"
+      subtitle="Central analytics hub for your Fantasy Premier League team. Access every feature from this dashboard."
+    >
+      <section className="section">
+        <div className="grid grid-3">
+          <StatCard
+            subtitle="Current Gameweek"
+            title={currentGw ? `Gameweek ${currentGw}` : "Gameweek --"}
+            value={timeLeft || "Loading deadline..."}
+            note={`Deadline: ${formatLocalDeadline(deadlineTime)}`}
+          />
+          <StatCard
+            subtitle="Budget Remaining"
+            title="Money in the bank"
+            value={hasTeamStored ? `${budget.toFixed(1)}M` : "None"}
+            note={hasTeamStored ? "Budget loaded from stored team." : "Store your team to load budget."}
+          />
+          <StatCard
+            subtitle="Transfers Remaining"
+            title="This Gameweek"
+            value={hasTeamStored ? transfers : "None"}
+            note={hasTeamStored ? "Free transfers loaded from stored team." : "Store your team to load transfers."}
+          />
+        </div>
+      </section>
 
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-            <Link to="/profile" className="profile-pill">
-              <span className="profile-avatar">{initials}</span>
-              <span className="profile-name">{displayName}</span>
-            </Link>
+      <section className="section">
+        <h2 className="h2">Analytics Modules</h2>
+        <p className="text-muted" style={{ marginBottom: "1.25rem" }}>
+          Click any card to open the full page. Each card shows a preview insight based on latest available data.
+        </p>
 
-            <button className="btn btn-outline" onClick={logout}>
-              Logout
-            </button>
-          </div>
-        </header>
+        <div className="grid dash-grid">
+          <PredictionCard to="/captaincy" title="Captaincy Analyzer" badge="Match Model" subtitle="Best captain for next gameweek" cta="Open Captaincy Analyzer ->">
+            <PlayerCard
+              name={captainPreview?.name || "Loading..."}
+              meta={`${positionLabel(captainPreview?.position)} | ${captainPreview?.team || "-"}`}
+              primaryValue={`${captainPreview?.predictedPoints ?? "-"} pts`}
+              secondaryValue={`Confidence: ${captainPreview?.confidence ? `${Math.round(captainPreview.confidence * 100)}%` : "-"}`}
+            />
+          </PredictionCard>
 
-        {/* Overview */}
-        <section className="section">
-          <h1 className="h1">Manager Dashboard</h1>
-          <p className="text-muted">
-            Central analytics hub for your Fantasy Premier League team. Access every feature from this dashboard.
-          </p>
-        </section>
+          <PredictionCard to="/predictions" title="Player Predictions" badge="Top performer" subtitle="Highest predicted points next gameweek" cta="View all predictions ->">
+            <PlayerCard
+              name={playerPreview?.name || "Loading..."}
+              meta={`${positionLabel(playerPreview?.position)} | ${playerPreview?.team || "-"}`}
+              primaryValue={`${playerPreview?.predictedPoints ?? "-"} pts`}
+              secondaryValue={`Confidence: ${playerPreview?.confidence ? `${Math.round(playerPreview.confidence * 100)}%` : "-"}`}
+            />
+          </PredictionCard>
 
-        {/* Core Stats */}
-        <section className="section">
-          <div className="grid grid-3">
-            <article className="card stat-card">
-              <div className="card-header">
-                <div>
-                  <div className="card-subtitle">Current Gameweek</div>
-                  <div className="card-title">
-                    {currentGw ? `Gameweek ${currentGw}` : "Gameweek --"}
-                  </div>
-                </div>
-              </div>
-              <div className="stat-card-value">
-                {timeLeft || "Loading deadline..."}
-              </div>
-              <p className="text-muted" style={{ marginTop: "0.5rem" }}>
-                Deadline: {formatLocalDeadline(deadlineTime)}
-              </p>
-            </article>
+          <PredictionCard to="/match-prediction" title="Match Prediction" badge="Match Model" subtitle="Most confident next-gameweek prediction" cta="View all match predictions ->">
+            <PlayerCard
+              name={matchPreview ? `${matchPreview.home} vs ${matchPreview.away}` : "Loading..."}
+              meta={matchPreview ? `GW ${matchPreview.gw} | xG ${matchPreview.homeXg}-${matchPreview.awayXg}` : "-"}
+              primaryValue={matchPreview?.outcome || "-"}
+              secondaryValue={matchPreview?.confidence ? `${Math.round(matchPreview.confidence * 100)}% confidence` : "-"}
+            />
+          </PredictionCard>
 
-            <article className="card stat-card">
-              <div className="card-header">
-                <div>
-                  <div className="card-subtitle">Budget Remaining</div>
-                  <div className="card-title">Money in the bank</div>
-                </div>
-              </div>
-              <div className="stat-card-value">{hasTeamStored ? `${budget.toFixed(1)}M` : "None"}</div>
-              <p className="text-muted" style={{ marginTop: "0.5rem" }}>
-                {hasTeamStored ? "Budget loaded from stored team." : "Store your team to load budget."}
-              </p>
-            </article>
-
-            <article className="card stat-card">
-              <div className="card-header">
-                <div>
-                  <div className="card-subtitle">Transfers Remaining</div>
-                  <div className="card-title">This Gameweek</div>
-                </div>
-              </div>
-              <div className="stat-card-value">{hasTeamStored ? transfers : "None"}</div>
-              <p className="text-muted" style={{ marginTop: "0.5rem" }}>
-                {hasTeamStored ? "Free transfers loaded from stored team." : "Store your team to load transfers."}
-              </p>
-            </article>
-          </div>
-        </section>
-
-
-        {/* Feature Cards */}
-        <section className="section">
-          <h2 className="h2">Analytics Modules</h2>
-          <p className="text-muted" style={{ marginBottom: "1.25rem" }}>
-            Click any card to open the full page. Each card shows a preview insight based on the latest available data.
-          </p>
-
-          <div className="grid dash-grid">
-            <Link to="/captaincy" className="dashboard-card">
-              <article className="card dashboard-card-inner">
-                <div className="card-header">
-                  <h3 className="card-title">Captaincy Analyzer</h3>
-                  <span className="badge badge-accent">Match Model</span>
-                </div>
-                <p className="text-muted">Best captain for next gameweek</p>
-                <div className="player-card" style={{ marginTop: "0.8rem" }}>
-                  <div className="player-row">
-                    <div>
-                      <strong>{captainPreview?.name || "Loading..."}</strong>
-                      <div className="text-muted">
-                        {(captainPreview?.position === 1 ? "GK" : captainPreview?.position === 2 ? "DEF" : captainPreview?.position === 3 ? "MID" : captainPreview?.position === 4 ? "FWD" : "-")} | {captainPreview?.team || "-"}
-                      </div>
-                    </div>
-                    <div className="player-stat-right">
-                      <div className="text-accent player-main-stat">{captainPreview?.predictedPoints ?? "-"} pts</div>
-                      <div className="player-sub-label">Confidence: {captainPreview?.confidence ? `${Math.round(captainPreview.confidence * 100)}%` : "-"}</div>
-                    </div>
-                  </div>
-                </div>
-                <p className="dashboard-card-cta">Open Captaincy Analyzer ?</p>
-              </article>
-            </Link>
-
-            <Link to="/predictions" className="dashboard-card">
-              <article className="card dashboard-card-inner">
-                <div className="card-header">
-                  <h3 className="card-title">Player Predictions</h3>
-                  <span className="badge badge-soft">Top performer</span>
-                </div>
-                <p className="text-muted">Highest predicted points next gameweek</p>
-                <div className="player-card" style={{ marginTop: "0.8rem" }}>
-                  <div className="player-row">
-                    <div>
-                      <strong>{playerPreview?.name || "Loading..."}</strong>
-                      <div className="text-muted">
-                        {(playerPreview?.position === 1 ? "GK" : playerPreview?.position === 2 ? "DEF" : playerPreview?.position === 3 ? "MID" : playerPreview?.position === 4 ? "FWD" : "-")} | {playerPreview?.team || "-"}
-                      </div>
-                    </div>
-                    <div className="player-stat-right">
-                      <div className="text-accent player-main-stat">{playerPreview?.predictedPoints ?? "-"} pts</div>
-                      <div className="player-sub-label">Confidence: {playerPreview?.confidence ? `${Math.round(playerPreview.confidence * 100)}%` : "-"}</div>
-                    </div>
-                  </div>
-                </div>
-                <p className="dashboard-card-cta">View all predictions &rarr;</p>
-              </article>
-            </Link>
-
-            <Link to="/price-change" className="dashboard-card">
-              <article className="card dashboard-card-inner">
-                <div className="card-header">
-                  <h3 className="card-title">Price Change Prediction</h3>
-                  <span className="badge badge-soft">Next 7 days</span>
-                </div>
-                <p className="text-muted">Most likely to rise</p>
-                <div className="player-card" style={{ marginTop: "0.8rem" }}>
-                  <div className="player-row">
-                    <div>
-                      <strong>Bukayo Saka</strong>
-                      <div className="text-muted">MID • ARS • £8.9M</div>
-                    </div>
-                    <div className="player-stat-right">
-                      <div className="player-main-stat" style={{ color: "#22c55e" }}>+£0.2M</div>
-                      <div className="player-sub-label">78% chance</div>
-                    </div>
-                  </div>
-                </div>
-                <p className="dashboard-card-cta">View price predictions →</p>
-              </article>
-            </Link>
-
-            <Link to="/match-prediction" className="dashboard-card">
-              <article className="card dashboard-card-inner">
-                <div className="card-header">
-                  <h3 className="card-title">Match Prediction</h3>
-                  <span className="badge badge-accent">Match Model</span>
-                </div>
-                <p className="text-muted">Most confident next-gameweek prediction</p>
-                <div className="player-card" style={{ marginTop: "0.8rem" }}>
-                  <div className="player-row">
-                    <div>
-                      <strong>{matchPreview ? `${matchPreview.home} vs ${matchPreview.away}` : "Loading..."}</strong>
-                      <div className="text-muted">
-                        {matchPreview ? `GW ${matchPreview.gw} | xG ${matchPreview.homeXg}-${matchPreview.awayXg}` : "-"}
-                      </div>
-                    </div>
-                    <div className="player-stat-right">
-                      <div className="text-accent player-main-stat">{matchPreview?.outcome || "-"}</div>
-                      <div className="player-sub-label">{matchPreview?.confidence ? `${Math.round(matchPreview.confidence * 100)}% confidence` : "-"}</div>
-                    </div>
-                  </div>
-                </div>
-                <p className="dashboard-card-cta">View all match predictions &rarr;</p>
-              </article>
-            </Link>
-
-            <Link to="/fixtures" className="dashboard-card">
-              <article className="card dashboard-card-inner">
-                <div className="card-header">
-                  <h3 className="card-title">Fixtures & FDR</h3>
-                  <span className="badge badge-soft">Fixture Model</span>
-                </div>
-                <p className="text-muted">Easiest fixture this week (home team)</p>
-                <div className="player-card" style={{ marginTop: "0.8rem" }}>
-                  <div className="player-row">
-                    <div>
-                      <strong>Liverpool vs Luton</strong>
-                      <div className="text-muted">Anfield • Home attack vs 20th</div>
-                    </div>
-                    <span className="fdr-pill fdr-2">FDR: 2 (Easy)</span>
-                  </div>
-                </div>
-                <p className="dashboard-card-cta">Open Fixtures & FDR →</p>
-              </article>
-            </Link>
-
-            <Link to="/team" className="dashboard-card">
-              <article className="card dashboard-card-inner">
-                <div className="card-header">
-                  <h3 className="card-title">Store My Team</h3>
-                  <span className="badge badge-accent">Required for budget</span>
-                </div>
-                <p className="text-muted">
-                  Status: <span className="text-accent">{hasTeamStored ? "Team synced" : "Team not synced"}</span>
-                </p>
-                <ul className="team-status-list">
-                  <li>• Store remaining budget & free transfers</li>
-                  <li>• Enter your 15-man squad</li>
-                  <li>• Enable Budget Optimizer</li>
-                </ul>
-                <p className="dashboard-card-cta">View / Update stored team →</p>
-              </article>
-            </Link>
-
-            <Link to="/compare" className="dashboard-card">
-              <article className="card dashboard-card-inner">
-                <div className="card-header">
-                  <h3 className="card-title">Player Comparison</h3>
-                  <span className="badge badge-soft">Head-to-head</span>
-                </div>
-                <p className="text-muted">Quick snapshot: Salah vs Haaland</p>
-                <div className="grid grid-2 compare-mini" style={{ marginTop: "0.8rem" }}>
-                  <div>
-                    <strong>Mohamed Salah</strong>
-                    <div className="text-muted">Pts: 145 • Price: £13.0M</div>
-                  </div>
-                  <div>
-                    <strong>Erling Haaland</strong>
-                    <div className="text-muted">Pts: 132 • Price: £14.5M</div>
-                  </div>
-                </div>
-                <p className="dashboard-card-cta">Open Player Comparison →</p>
-              </article>
-            </Link>
-          </div>
-        </section>
-      </main>
-    </div>
+          <PredictionCard to="/price-change" title="Price Change Prediction" badge="Next 7 days" subtitle="Forecast likely risers and fallers" cta="View price predictions ->" />
+          <PredictionCard to="/fixtures" title="Fixtures & FDR" badge="Fixture Model" subtitle="Difficulty outlook and probabilities" cta="Open Fixtures & FDR ->" />
+          <PredictionCard to="/team" title="Store My Team" badge="Required for budget" subtitle={hasTeamStored ? "Status: Team synced" : "Status: Team not synced"} cta="View / Update stored team ->" />
+          <PredictionCard to="/compare" title="Player Comparison" badge="Head-to-head" subtitle="Compare two players using live stats + ML" cta="Open Player Comparison ->" />
+        </div>
+      </section>
+    </MainLayout>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

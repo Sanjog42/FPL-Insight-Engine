@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import useAuthGuard from "../hooks/useAuthGuard";
-import AppLayout from "../components/AppLayout";
+import AppLayout from "../layouts/AppLayout";
 import { apiFetch } from "../services/api";
 
 export default function Profile() {
@@ -218,3 +218,4 @@ export default function Profile() {
     </AppLayout>
   );
 }
+

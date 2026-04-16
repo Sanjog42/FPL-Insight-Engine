@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import useAuthGuard from "../hooks/useAuthGuard";
-import AppLayout from "../components/AppLayout";
+import AppLayout from "../layouts/AppLayout";
 import { apiFetch } from "../services/api";
 
 function safeNum(value, fallback = 0) {
@@ -29,12 +29,6 @@ function directionText(direction) {
   if (direction === "RISE") return "This player's price is expected to go up soon.";
   if (direction === "FALL") return "This player's price is expected to drop soon.";
   return "This player's price is likely to stay stable for now.";
-}
-
-function trendText(slope) {
-  if (slope > 0.02) return "Recent trend: Upward";
-  if (slope < -0.02) return "Recent trend: Downward";
-  return "Recent trend: Flat";
 }
 
 export default function PriceChange() {
@@ -349,4 +343,5 @@ export default function PriceChange() {
     </AppLayout>
   );
 }
+
 

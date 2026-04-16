@@ -34,6 +34,13 @@ export function getRefreshToken() {
   return localStorage.getItem("refreshToken");
 }
 
+export function roleHomePath(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  if (normalized === "superadmin") return "/superadmin";
+  if (normalized === "admin") return "/admin";
+  return "/dashboard";
+}
+
 /* ================= CORE FETCH ================= */
 
 export async function apiFetch(path, options = {}, retry = true) {

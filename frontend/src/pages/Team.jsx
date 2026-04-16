@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import useAuthGuard from "../hooks/useAuthGuard";
-import AppLayout from "../components/AppLayout";
+import AppLayout from "../layouts/AppLayout";
 import { apiFetch } from "../services/api";
 
 const SLOT_DEFS = [
@@ -522,6 +522,7 @@ export default function Team() {
     </AppLayout>
   );
 }
+
 
 
 

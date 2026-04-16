@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import useAuthGuard from "../hooks/useAuthGuard";
-import AppLayout from "../components/AppLayout";
+import AppLayout from "../layouts/AppLayout";
 import { apiFetch } from "../services/api";
 
 const POSITION_MAP = {
@@ -88,3 +88,4 @@ export default function Captaincy() {
     </AppLayout>
   );
 }
+
