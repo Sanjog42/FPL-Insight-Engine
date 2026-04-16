@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch, clearSession } from "../services/api";
 
 export default function AppLayout({ title, subtitle, children }) {
@@ -26,6 +26,19 @@ export default function AppLayout({ title, subtitle, children }) {
     nav("/login");
   }
 
+  const role = String(user?.role || "").toLowerCase();
+  const backPath = useMemo(() => {
+    if (role === "superadmin") return "/superadmin";
+    if (role === "admin") return "/admin";
+    return "/dashboard";
+  }, [role]);
+
+  const backLabel = useMemo(() => {
+    if (role === "superadmin") return "Back to SuperAdmin Dashboard";
+    if (role === "admin") return "Back to Admin Dashboard";
+    return "Back to Dashboard";
+  }, [role]);
+
   const displayName = user?.full_name?.trim() || user?.username || "User";
   const initials =
     displayName
@@ -44,8 +57,8 @@ export default function AppLayout({ title, subtitle, children }) {
           </div>
 
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-            <Link to="/dashboard" className="btn btn-outline">
-              Back to Dashboard
+            <Link to={backPath} className="btn btn-outline">
+              {backLabel}
             </Link>
             <Link to="/profile" className="profile-pill">
               <span className="profile-avatar">{initials}</span>

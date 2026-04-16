@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { apiFetch, clearSession, getToken } from "../services/api";
+import { apiFetch, setToken, setRefreshToken, getToken } from "../services/api";
 
 export default function Dashboard() {
   const nav = useNavigate();
@@ -65,7 +65,7 @@ export default function Dashboard() {
         setTransfers(freeTransfers);
         setHasTeamStored(stored?.teamStored === true);
       } catch {
-        clearSession();
+        setToken(null);
         nav("/login");
       }
     })();
@@ -219,7 +219,8 @@ export default function Dashboard() {
   }
 
   function logout() {
-    clearSession();
+    setToken(null);
+    setRefreshToken(null);
     nav("/login");
   }
 
@@ -287,7 +288,7 @@ export default function Dashboard() {
                   <div className="card-title">Money in the bank</div>
                 </div>
               </div>
-              <div className="stat-card-value">{hasTeamStored ? `£${budget.toFixed(1)}M` : "None"}</div>
+              <div className="stat-card-value">{hasTeamStored ? `${budget.toFixed(1)}M` : "None"}</div>
               <p className="text-muted" style={{ marginTop: "0.5rem" }}>
                 {hasTeamStored ? "Budget loaded from stored team." : "Store your team to load budget."}
               </p>
@@ -479,7 +480,6 @@ export default function Dashboard() {
     </div>
   );
 }
-
 
 
 

@@ -16,6 +16,7 @@ from .serializers import (
     FixtureSerializer,
     FullTeamGenerateRequestSerializer,
     MatchRequestSerializer,
+    ModelActionSerializer,
     ModelTrainingJobSerializer,
     ModelVersionSerializer,
     PlayerPointsRequestSerializer,
@@ -57,6 +58,16 @@ def _handle_fpl_error(exc: Exception):
     if isinstance(exc, FPLServiceUnavailable):
         raise FPLUnavailable() from exc
     raise exc
+
+
+def _validate_model_type(model_type: str | None, allow_empty: bool = False):
+    if allow_empty and not model_type:
+        return None
+
+    valid = {choice[0] for choice in ModelVersion.ModelType.choices}
+    if model_type not in valid:
+        raise ValidationError("Invalid model_type")
+    return model_type
 
 
 class BootstrapView(APIView):
@@ -111,7 +122,8 @@ class PlayerPointsPredictView(APIView):
             raise NotFound("Unknown player_id")
         except Exception as exc:
             _handle_fpl_error(exc)
-        result = apply_model_to_player_points(result, get_active_model_version())
+        version = get_active_model_version(ModelVersion.ModelType.PLAYER_POINTS)
+        result = apply_model_to_player_points(result, version)
         return Response(result)
 
 
@@ -128,7 +140,8 @@ class PricePredictView(APIView):
             raise NotFound("Unknown player_id")
         except Exception as exc:
             _handle_fpl_error(exc)
-        result = apply_model_to_price(result, get_active_model_version())
+        version = get_active_model_version(ModelVersion.ModelType.PRICE_CHANGE)
+        result = apply_model_to_price(result, version)
         return Response(result)
 
 
@@ -145,7 +158,8 @@ class MatchPredictView(APIView):
             raise NotFound("Unknown team_id")
         except Exception as exc:
             _handle_fpl_error(exc)
-        result = apply_model_to_match_prediction(result, get_active_model_version())
+        version = get_active_model_version(ModelVersion.ModelType.MATCH_PREDICTION)
+        result = apply_model_to_match_prediction(result, version)
         return Response(result)
 
 
@@ -162,7 +176,9 @@ class FDRView(APIView):
             raise NotFound("Unknown team_id")
         except Exception as exc:
             _handle_fpl_error(exc)
-        result["model_version"] = get_active_model_version().name if get_active_model_version() else "base"
+
+        version = get_active_model_version(ModelVersion.ModelType.FDR)
+        result["model_version"] = version.name if version else "base"
         return Response(result)
 
 
@@ -175,7 +191,7 @@ class UpcomingMatchPredictView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        version = get_active_model_version()
+        version = get_active_model_version(ModelVersion.ModelType.MATCH_PREDICTION)
         for fixture in result.get("fixtures", []):
             fixture["prediction"] = apply_model_to_match_prediction(fixture.get("prediction") or {}, version)
         result["model_version"] = version.name if version else "base"
@@ -201,7 +217,8 @@ class CaptaincyTopPicksView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        result = apply_model_to_captaincy(result, get_active_model_version())
+        version = get_active_model_version(ModelVersion.ModelType.CAPTAINCY)
+        result = apply_model_to_captaincy(result, version)
         return Response(result)
 
 
@@ -226,7 +243,8 @@ class TransferSuggestView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        result["model_version"] = get_active_model_version().name if get_active_model_version() else "base"
+        version = get_active_model_version(ModelVersion.ModelType.TRANSFER_SUGGESTION)
+        result["model_version"] = version.name if version else "base"
         return Response(result)
 
 
@@ -245,7 +263,8 @@ class FullTeamGenerateView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        result["model_version"] = get_active_model_version().name if get_active_model_version() else "base"
+        version = get_active_model_version(ModelVersion.ModelType.TEAM_GENERATION)
+        result["model_version"] = version.name if version else "base"
         return Response(result)
 
 
@@ -337,8 +356,12 @@ class RetrainModelView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
     def post(self, request):
+        serializer = ModelActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        model_type = serializer.validated_data["model_type"]
+
         try:
-            job, version = run_retrain_job(request.user)
+            job, version = run_retrain_job(request.user, model_type)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as exc:
@@ -358,10 +381,21 @@ class ModelWorkflowView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
     def get(self, request):
-        drafts = ModelVersion.objects.filter(status=ModelVersion.Status.DRAFT).order_by("-trained_at")[:10]
-        published = ModelVersion.objects.filter(status=ModelVersion.Status.PUBLISHED).order_by("-published_at", "-trained_at")[:20]
-        jobs = ModelTrainingJob.objects.select_related("model_version", "triggered_by").all()[:15]
-        active = get_active_model_version()
+        model_type = _validate_model_type(request.query_params.get("model_type"), allow_empty=True)
+
+        drafts_qs = ModelVersion.objects.filter(status=ModelVersion.Status.DRAFT)
+        published_qs = ModelVersion.objects.filter(status=ModelVersion.Status.PUBLISHED)
+        jobs_qs = ModelTrainingJob.objects.select_related("model_version", "triggered_by")
+
+        if model_type:
+            drafts_qs = drafts_qs.filter(model_type=model_type)
+            published_qs = published_qs.filter(model_type=model_type)
+            jobs_qs = jobs_qs.filter(model_type=model_type)
+
+        drafts = drafts_qs.order_by("-trained_at")[:10]
+        published = published_qs.order_by("-published_at", "-trained_at")[:20]
+        jobs = jobs_qs.order_by("-created_at")[:15]
+        active = get_active_model_version(model_type)
 
         return Response(
             {
@@ -382,6 +416,22 @@ class PreviewDraftView(APIView):
         except ModelVersion.DoesNotExist:
             return Response({"detail": "Draft not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        active = get_active_model_version(draft.model_type)
+
+        if draft.model_type not in (ModelVersion.ModelType.MATCH_PREDICTION, ModelVersion.ModelType.FDR):
+            return Response(
+                {
+                    "draft": ModelVersionSerializer(draft).data,
+                    "active": ModelVersionSerializer(active).data if active else None,
+                    "comparison": [],
+                    "summary": {
+                        "module": draft.model_type,
+                        "active_metrics": active.metrics if active else {},
+                        "draft_metrics": draft.metrics,
+                    },
+                }
+            )
+
         bootstrap, _ = get_bootstrap()
         fixtures, _ = get_fixtures()
         teams = bootstrap.get("teams", [])
@@ -389,7 +439,6 @@ class PreviewDraftView(APIView):
         next_gw = _get_next_gw(events) or 1
 
         upcoming = [f for f in fixtures if f.get("event") == next_gw][:6]
-        active = get_active_model_version()
 
         comparison = []
         for fixture in upcoming:
@@ -432,7 +481,11 @@ class PublishDraftView(APIView):
             return Response({"detail": "Draft not found"}, status=status.HTTP_404_NOT_FOUND)
 
         with transaction.atomic():
-            ModelVersion.objects.filter(is_active=True).update(is_active=False)
+            ModelVersion.objects.filter(
+                is_active=True,
+                status=ModelVersion.Status.PUBLISHED,
+                model_type=draft.model_type,
+            ).update(is_active=False)
             draft.status = ModelVersion.Status.PUBLISHED
             draft.is_active = True
             draft.published_at = timezone.now()
@@ -450,12 +503,16 @@ class RollbackModelView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
 
     def post(self, request):
-        current_active = get_active_model_version()
-        if not current_active:
-            return Response({"detail": "No active model to rollback"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = ModelActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        model_type = serializer.validated_data["model_type"]
+
+        current_active = get_active_model_version(model_type)
+        if not current_active or current_active.model_type != model_type:
+            return Response({"detail": "No active model to rollback for this module"}, status=status.HTTP_400_BAD_REQUEST)
 
         previous = (
-            ModelVersion.objects.filter(status=ModelVersion.Status.PUBLISHED)
+            ModelVersion.objects.filter(status=ModelVersion.Status.PUBLISHED, model_type=model_type)
             .exclude(id=current_active.id)
             .order_by("-published_at", "-trained_at")
             .first()

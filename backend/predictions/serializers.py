@@ -39,6 +39,10 @@ class FullTeamGenerateRequestSerializer(serializers.Serializer):
     budget = serializers.FloatField(min_value=80.0, max_value=130.0, required=False, default=100.0)
 
 
+class ModelActionSerializer(serializers.Serializer):
+    model_type = serializers.ChoiceField(choices=ModelVersion.ModelType.choices)
+
+
 class TeamSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
@@ -126,6 +130,7 @@ class ModelVersionSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "model_type",
             "status",
             "is_active",
             "parameters",
@@ -147,6 +152,7 @@ class ModelTrainingJobSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "status",
+            "model_type",
             "triggered_by",
             "triggered_by_username",
             "model_version",

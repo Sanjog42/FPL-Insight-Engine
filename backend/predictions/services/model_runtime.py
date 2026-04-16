@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from .models import ModelVersion
+from ..models import ModelVersion
 
 
 DEFAULT_PARAMS = {
@@ -15,8 +15,15 @@ DEFAULT_PARAMS = {
 }
 
 
-def get_active_model_version():
-    return ModelVersion.objects.filter(is_active=True, status=ModelVersion.Status.PUBLISHED).first()
+def get_active_model_version(model_type: str | None = None):
+    queryset = ModelVersion.objects.filter(is_active=True, status=ModelVersion.Status.PUBLISHED)
+    if model_type:
+        typed = queryset.filter(model_type=model_type).first()
+        if typed:
+            return typed
+        if model_type != ModelVersion.ModelType.GENERAL:
+            return queryset.filter(model_type=ModelVersion.ModelType.GENERAL).first()
+    return queryset.first()
 
 
 def get_params(version: ModelVersion | None = None) -> Dict[str, float]:

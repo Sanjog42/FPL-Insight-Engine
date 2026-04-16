@@ -71,11 +71,26 @@ class PredictionRecord(models.Model):
 
 
 class ModelVersion(models.Model):
+    class ModelType(models.TextChoices):
+        GENERAL = "general", "General"
+        PLAYER_POINTS = "player_points", "Player Points"
+        PRICE_CHANGE = "price_change", "Price Change"
+        MATCH_PREDICTION = "match_prediction", "Match Prediction"
+        FDR = "fdr", "Fixture Difficulty"
+        CAPTAINCY = "captaincy", "Captaincy"
+        TRANSFER_SUGGESTION = "transfer_suggestion", "Transfer Suggestion"
+        TEAM_GENERATION = "team_generation", "Team Generation"
+
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         PUBLISHED = "published", "Published"
 
     name = models.CharField(max_length=120, unique=True)
+    model_type = models.CharField(
+        max_length=40,
+        choices=ModelType.choices,
+        default=ModelType.GENERAL,
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     is_active = models.BooleanField(default=False)
     parameters = models.JSONField(default=dict, blank=True)
@@ -106,6 +121,11 @@ class ModelTrainingJob(models.Model):
         FAILED = "failed", "Failed"
 
     status = models.CharField(max_length=20, choices=JobStatus.choices, default=JobStatus.QUEUED)
+    model_type = models.CharField(
+        max_length=40,
+        choices=ModelVersion.ModelType.choices,
+        default=ModelVersion.ModelType.GENERAL,
+    )
     triggered_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

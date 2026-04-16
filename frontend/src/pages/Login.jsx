@@ -63,7 +63,7 @@ export default function Login() {
       <div className="auth-background"></div>
 
       <header className="navbar">
-        <div className="navbar-title">? FPL Insight Engine</div>
+        <div className="navbar-title">FPL Insight Engine</div>
         <div className="navbar-actions">
           <a
             href="#"
@@ -82,7 +82,7 @@ export default function Login() {
         <div className="auth-wrapper">
           <div className="auth-visual">
             <div className="auth-visual-content">
-              <div className="football-icon">?</div>
+              <div className="football-icon">FPL</div>
               <h1 className="auth-title">Welcome Back!</h1>
               <p className="auth-subtitle">
                 Sign in as a user or administrator. The system will automatically
@@ -90,16 +90,16 @@ export default function Login() {
               </p>
               <div className="auth-features">
                 <div className="auth-feature-item">
-                  <span className="feature-icon">??</span>
-                  <span>User: Access analytics dashboard</span>
+                  <span className="feature-icon">Insights</span>
+                  <span>Explore player form, fixtures, and prediction outputs</span>
                 </div>
                 <div className="auth-feature-item">
-                  <span className="feature-icon">??</span>
-                  <span>Admin: Manage system & users</span>
+                  <span className="feature-icon">Control</span>
+                  <span>Manage player, team, fixture data and run model operations</span>
                 </div>
                 <div className="auth-feature-item">
-                  <span className="feature-icon">??</span>
-                  <span>Same login page for both roles</span>
+                  <span className="feature-icon">Access</span>
+                  <span>One secure login with role-based dashboards and permissions</span>
                 </div>
               </div>
             </div>
@@ -110,7 +110,7 @@ export default function Login() {
               <div className="auth-form-header">
                 <h2 className="h2">Login</h2>
                 <p className="text-muted">
-                  Sign in to your FPL Insight account (User or Admin)
+                  Sign in to your FPL Insight account
                 </p>
               </div>
 
@@ -121,7 +121,7 @@ export default function Login() {
               <form className="auth-form" onSubmit={onSubmit}>
                 <div className="form-group">
                   <label className="label">
-                    <span>??</span> Email / Username
+                    Username
                   </label>
                   <input
                     type="text"
@@ -134,7 +134,7 @@ export default function Login() {
 
                 <div className="form-group">
                   <label className="label">
-                    <span>??</span> Password
+                    Password
                   </label>
                   <input
                     type="password"
@@ -142,18 +142,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                  />
-                  <div className="form-helper">
-                    <a
-                      href="#"
-                      className="text-accent"
-                      style={{ fontSize: "0.85rem" }}
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      Forgot password?
-                    </a>
-                  </div>
-                </div>
+                  /></div>
 
                 <div className="form-group" style={{ marginTop: "1.5rem" }}>
                   <button
@@ -162,7 +151,7 @@ export default function Login() {
                     style={{ width: "100%", fontSize: "1rem", padding: "0.85rem" }}
                     disabled={loading}
                   >
-                    {loading ? "Logging in..." : "?? Login"}
+                    {loading ? "Logging in..." : "Login"}
                   </button>
                 </div>
               </form>
@@ -170,7 +159,7 @@ export default function Login() {
               <p className="auth-footer">
                 <span className="text-muted">New to FPL Insight?</span>{" "}
                 <Link to="/register" className="text-accent">
-                  Create your account ?
+                  Create your account
                 </Link>
               </p>
             </div>
@@ -180,3 +169,6 @@ export default function Login() {
     </div>
   );
 }
+
+
+
