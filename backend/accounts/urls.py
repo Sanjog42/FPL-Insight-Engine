@@ -5,6 +5,7 @@ from .views import (
     ChangePasswordView,
     DeleteUserView,
     DemoteUserView,
+    ForgotPasswordView,
     LoginView,
     MeView,
     PromoteUserView,
@@ -15,6 +16,7 @@ from .views import (
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
     path("login/", LoginView.as_view(), name="login"),
+    path("forgot-password/", ForgotPasswordView.as_view(), name="forgot-password"),
     path("refresh/", TokenRefreshView.as_view(), name="refresh"),
     path("me/", MeView.as_view(), name="me"),
     path("change-password/", ChangePasswordView.as_view(), name="change-password"),

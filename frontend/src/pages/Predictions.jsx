@@ -67,6 +67,7 @@ export default function Predictions() {
     playerOptions.forEach((o) => map.set(o.label.toLowerCase(), o.id));
     return map;
   }, [playerOptions]);
+  const confidencePct = result?.confidence ? Math.round(result.confidence * 100) : 0;
 
   function onPlayerQueryChange(value) {
     setPlayerQuery(value);
@@ -109,76 +110,84 @@ export default function Predictions() {
       subtitle="Predict points based on recent form, minutes, and opponent difficulty."
     >
       <section className="section">
-        <div className="card">
-          <div className="grid grid-3" style={{ marginBottom: "1rem" }}>
-            <div className="form-group">
-              <label className="label">Player</label>
-              <input
-                className="input"
-                list="points-player-options"
-                value={playerQuery}
-                onChange={(e) => onPlayerQueryChange(e.target.value)}
-                placeholder="Search and select player..."
-              />
-              <datalist id="points-player-options">
-                {playerOptions.map((o) => (
-                  <option key={o.id} value={o.label} />
-                ))}
-              </datalist>
-              <div className="form-helper">Type a player name and choose a suggestion</div>
+        <div className="card predict-shell">
+          <div className="predict-shell-top">
+            <div>
+              <div className="predict-kicker">Advanced Model</div>
+              <h3 className="predict-title">Prediction Workspace</h3>
+              <p className="predict-subtitle">
+                Select a player, tune availability filters, and generate a data-backed points projection.
+              </p>
             </div>
+            <div className="predict-chip">
+              <span className="predict-chip-label">Picker Pool</span>
+              <span className="predict-chip-value">{playerOptions.length} players</span>
+            </div>
+          </div>
 
-            <div className="form-group">
-              <label className="label">Availability</label>
-              <div className="pill-row">
-                <button
-                  type="button"
-                  className={`pill ${onlyAvailable ? "pill-active" : ""}`}
-                  onClick={() => setOnlyAvailable(true)}
-                >
-                  Available
-                </button>
-                <button
-                  type="button"
-                  className={`pill ${!onlyAvailable ? "pill-active" : ""}`}
-                  onClick={() => setOnlyAvailable(false)}
-                >
-                  All Players
-                </button>
+          <form className="predict-grid" onSubmit={submit}>
+            <div className="predict-panel">
+              <div className="form-group">
+                <label className="label">Player</label>
+                <input
+                  className="input predict-input"
+                  list="points-player-options"
+                  value={playerQuery}
+                  onChange={(e) => onPlayerQueryChange(e.target.value)}
+                  placeholder="Search and select player..."
+                />
+                <datalist id="points-player-options">
+                  {playerOptions.map((o) => (
+                    <option key={o.id} value={o.label} />
+                  ))}
+                </datalist>
+                <div className="form-helper">Type a player name and pick a suggestion</div>
+              </div>
+
+              <div className="form-group">
+                <label className="label">Availability</label>
+                <div className="predict-toggle-wrap">
+                  <button
+                    type="button"
+                    className={`pill ${onlyAvailable ? "pill-active" : ""}`}
+                    onClick={() => setOnlyAvailable(true)}
+                  >
+                    Available
+                  </button>
+                  <button
+                    type="button"
+                    className={`pill ${!onlyAvailable ? "pill-active" : ""}`}
+                    onClick={() => setOnlyAvailable(false)}
+                  >
+                    All Players
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="form-group" style={{ alignSelf: "end" }}>
+            <div className="predict-actions">
               <button
-                className="btn btn-outline"
+                className="btn btn-outline predict-refresh-btn"
                 type="button"
                 onClick={() => loadPlayers(true)}
                 disabled={loadingPlayers}
               >
                 {loadingPlayers ? "Refreshing..." : "Refresh data"}
               </button>
-            </div>
-          </div>
 
-          <div className="inline-note">
-            Available in picker: {playerOptions.length} players
-          </div>
-
-          <form className="grid grid-3" onSubmit={submit}>
-            <div className="form-group" style={{ alignSelf: "end" }}>
-              <button className="btn btn-accent" type="submit" disabled={loading}>
+              <button className="btn btn-accent predict-submit-btn" type="submit" disabled={loading}>
                 {loading ? "Predicting..." : "Predict Points"}
               </button>
             </div>
           </form>
 
-          {err ? <p style={{ color: "#ef4444" }}>{err}</p> : null}
+          {err ? <p className="predict-error">{err}</p> : null}
 
           {result ? (
-            <div className="player-card" style={{ marginTop: "1rem" }}>
+            <div className="player-card predict-result">
               <div className="player-row">
                 <div>
-                  <strong>Predicted Points</strong>
+                  <strong className="predict-result-title">Predicted Points</strong>
                   <div className="text-muted">
                     GW {result.gameweek || "N/A"} - Player ID {result.player_id}
                   </div>
@@ -187,27 +196,32 @@ export default function Predictions() {
                   <div className="text-accent player-main-stat">
                     {result.predicted_points} pts
                   </div>
-                  <div className="player-sub-label">
-                    Confidence: {Math.round(result.confidence * 100)}%
-                  </div>
+                  <div className="player-sub-label">Confidence: {confidencePct}%</div>
                   {result.features_used?.data_source === "bootstrap-only" ? (
                     <div className="player-sub-label">Limited recent history</div>
                   ) : null}
                 </div>
               </div>
 
-              <div className="grid grid-3" style={{ marginTop: "0.8rem" }}>
-                <div className="card mini-card">
-                  <div className="card-subtitle">Prediction Basis</div>
-                  <div className="card-title">Recent Form</div>
+              <div className="predict-confidence-bar" aria-hidden="true">
+                <div
+                  className="predict-confidence-fill"
+                  style={{ width: `${Math.max(8, confidencePct)}%` }}
+                />
+              </div>
+
+              <div className="grid grid-3 predict-metrics">
+                <div className="card mini-card predict-metric-card">
+                  <div className="card-subtitle">How we estimated this</div>
+                  <div className="card-title">Recent performance</div>
                 </div>
-                <div className="card mini-card">
-                  <div className="card-subtitle">Minutes Trend</div>
-                  <div className="card-title">Included</div>
+                <div className="card mini-card predict-metric-card">
+                  <div className="card-subtitle">Playing time check</div>
+                  <div className="card-title">Expected minutes considered</div>
                 </div>
-                <div className="card mini-card">
-                  <div className="card-subtitle">Opponent Context</div>
-                  <div className="card-title">Included</div>
+                <div className="card mini-card predict-metric-card">
+                  <div className="card-subtitle">Fixture difficulty</div>
+                  <div className="card-title">Opponent strength considered</div>
                 </div>
               </div>
             </div>

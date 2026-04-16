@@ -393,15 +393,33 @@ img {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Keep 7 dashboard cards visually symmetric by centering the final card. */
+.dash-grid > .dashboard-card:last-child:nth-child(3n + 1) {
+  grid-column: 2;
+}
+
 @media (max-width: 1024px) {
   .dash-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-grid > .dashboard-card:last-child:nth-child(2n + 1) {
+    grid-column: 1 / -1;
+    max-width: 620px;
+    justify-self: center;
+    width: 100%;
   }
 }
 
 @media (max-width: 768px) {
   .dash-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dash-grid > .dashboard-card:last-child:nth-child(2n + 1) {
+    grid-column: auto;
+    max-width: none;
+    justify-self: stretch;
   }
 }
 
@@ -561,6 +579,97 @@ img {
   font-size: 0.85rem;
   color: var(--muted);
   margin-bottom: 0.9rem;
+}
+
+.workflow-header {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.workflow-subtitle {
+  margin: 0.45rem 0 0;
+  max-width: 520px;
+}
+
+.workflow-toolbar {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* Keep 7-module layout visually symmetric by centering the final single tile. */
+.module-grid > .module-tile:last-child:nth-child(3n + 1) {
+  grid-column: 2;
+}
+
+.module-tile {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: linear-gradient(160deg, rgba(17, 26, 48, 0.92), rgba(12, 18, 34, 0.92));
+  color: var(--text);
+  padding: 0.8rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.module-tile:hover {
+  transform: translateY(-1px);
+  border-color: rgba(60, 243, 255, 0.55);
+  box-shadow: 0 14px 34px rgba(7, 12, 28, 0.45);
+}
+
+.module-tile-active {
+  border-color: rgba(60, 243, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(60, 243, 255, 0.32), 0 18px 45px rgba(8, 14, 36, 0.5);
+  background:
+    radial-gradient(circle at top right, rgba(60, 243, 255, 0.14), transparent 55%),
+    linear-gradient(160deg, rgba(19, 34, 64, 0.96), rgba(11, 20, 40, 0.96));
+}
+
+.module-tile-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.module-tile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.1rem;
+  height: 1.5rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 170, 215, 0.35);
+  background: rgba(17, 26, 48, 0.92);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  color: var(--accent);
+}
+
+.module-tile-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.module-tile-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 /* Confidence bar */
@@ -988,6 +1097,19 @@ img {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-grid > .module-tile:last-child:nth-child(3n + 1) {
+    grid-column: auto;
+  }
+
+  .workflow-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 /* === Navbar (for landing/login/register pages) === */
 .navbar {
@@ -1082,6 +1204,10 @@ img {
   .auth-form .input[name="confirm_password"],
   .auth-form button {
     grid-column: 1 / -1;
+  }
+
+  .auth-form.auth-form-single {
+    display: flex;
   }
 }
 .picker-backdrop {
@@ -1253,6 +1379,154 @@ img {
   background: linear-gradient(90deg, rgba(255, 122, 217, 0.55), rgba(255, 122, 217, 0.95));
 }
 
+/* === Predictions page visual upgrade === */
+.predict-shell {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(60, 243, 255, 0.55);
+  background:
+    radial-gradient(circle at 10% -10%, rgba(60, 243, 255, 0.2), transparent 35%),
+    radial-gradient(circle at 95% 20%, rgba(255, 122, 217, 0.14), transparent 40%),
+    linear-gradient(140deg, rgba(10, 19, 43, 0.96), rgba(8, 14, 30, 0.96));
+}
+
+.predict-shell-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.predict-kicker {
+  display: inline-block;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a9edff;
+  border: 1px solid rgba(60, 243, 255, 0.45);
+  border-radius: 999px;
+  padding: 0.22rem 0.7rem;
+  background: rgba(60, 243, 255, 0.12);
+}
+
+.predict-title {
+  margin: 0.65rem 0 0.3rem;
+  font-size: 1.55rem;
+  line-height: 1.15;
+}
+
+.predict-subtitle {
+  margin: 0;
+  color: var(--muted);
+  max-width: 620px;
+}
+
+.predict-chip {
+  min-width: 170px;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 122, 217, 0.45);
+  background: rgba(34, 21, 58, 0.45);
+  padding: 0.65rem 0.75rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.predict-chip-label {
+  font-size: 0.74rem;
+  color: #d8b4fe;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.predict-chip-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.predict-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.65fr);
+  gap: 1rem;
+}
+
+.predict-panel,
+.predict-actions {
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: rgba(11, 20, 44, 0.72);
+  padding: 1rem;
+}
+
+.predict-input {
+  border-color: rgba(60, 243, 255, 0.32);
+}
+
+.predict-toggle-wrap {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.predict-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.85rem;
+}
+
+.predict-refresh-btn,
+.predict-submit-btn {
+  width: 100%;
+  min-height: 46px;
+}
+
+.predict-submit-btn {
+  box-shadow: 0 12px 28px rgba(60, 243, 255, 0.22);
+}
+
+.predict-error {
+  margin-top: 0.8rem;
+  color: #ff8888;
+  background: rgba(127, 29, 29, 0.32);
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: 0.7rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.predict-result {
+  margin-top: 1rem;
+  background: linear-gradient(160deg, rgba(17, 28, 58, 0.92), rgba(8, 14, 30, 0.9));
+}
+
+.predict-result-title {
+  font-size: 1.1rem;
+}
+
+.predict-confidence-bar {
+  height: 0.62rem;
+  margin-top: 0.85rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 170, 215, 0.2);
+}
+
+.predict-confidence-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3cf3ff, #7dd3fc 48%, #ff7ad9);
+  box-shadow: 0 0 16px rgba(60, 243, 255, 0.42);
+}
+
+.predict-metrics {
+  margin-top: 0.85rem;
+}
+
+.predict-metric-card {
+  background: rgba(10, 18, 40, 0.85);
+  border-color: rgba(60, 243, 255, 0.25);
+}
+
 @media (max-width: 900px) {
   .compare-head {
     grid-template-columns: 1fr;
@@ -1264,5 +1538,41 @@ img {
 
   .compare-metric-row {
     grid-template-columns: 72px 1fr 72px;
+  }
+
+  .predict-shell-top {
+    flex-direction: column;
+  }
+
+  .predict-chip {
+    min-width: auto;
+    width: 100%;
+  }
+
+  .predict-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .predict-actions {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .predict-refresh-btn,
+  .predict-submit-btn {
+    width: auto;
+    flex: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .predict-actions {
+    flex-direction: column;
+  }
+
+  .predict-refresh-btn,
+  .predict-submit-btn {
+    width: 100%;
+    flex: unset;
   }
 }

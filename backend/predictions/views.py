@@ -1,8 +1,10 @@
-from decimal import Decimal
+import json
+from hashlib import sha256
 
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -10,20 +12,16 @@ from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminOrSuperAdmin, IsUserOrAbove
 
-from .models import Fixture, ModelTrainingJob, ModelVersion, Player, PredictionRecord, Team
+from .models import ModelTrainingJob, ModelVersion
 from .serializers import (
     FDRQuerySerializer,
-    FixtureSerializer,
     FullTeamGenerateRequestSerializer,
     MatchRequestSerializer,
     ModelActionSerializer,
     ModelTrainingJobSerializer,
     ModelVersionSerializer,
     PlayerPointsRequestSerializer,
-    PlayerSerializer,
-    PredictionRecordSerializer,
     PriceRequestSerializer,
-    TeamSerializer,
     TransferSuggestRequestSerializer,
 )
 from .services.fpl_client import FPLServiceUnavailable, get_bootstrap, get_fixtures
@@ -54,6 +52,9 @@ class FPLUnavailable(APIException):
     default_detail = "FPL API unavailable and no cached data."
 
 
+ML_RESPONSE_CACHE_TTL_SECONDS = 60 * 5
+
+
 def _handle_fpl_error(exc: Exception):
     if isinstance(exc, FPLServiceUnavailable):
         raise FPLUnavailable() from exc
@@ -68,6 +69,12 @@ def _validate_model_type(model_type: str | None, allow_empty: bool = False):
     if model_type not in valid:
         raise ValidationError("Invalid model_type")
     return model_type
+
+
+def _build_ml_cache_key(prefix: str, payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    digest = sha256(encoded.encode("utf-8")).hexdigest()
+    return f"ml-response:{prefix}:{digest}"
 
 
 class BootstrapView(APIView):
@@ -113,6 +120,17 @@ class PlayerPointsPredictView(APIView):
         serializer = PlayerPointsRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        version = get_active_model_version(ModelVersion.ModelType.PLAYER_POINTS)
+        cache_key = _build_ml_cache_key(
+            "player-points",
+            {
+                "payload": payload,
+                "model_version": version.name if version else "base",
+            },
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
         try:
             result = predict_player_points(
                 payload["player_id"],
@@ -122,8 +140,8 @@ class PlayerPointsPredictView(APIView):
             raise NotFound("Unknown player_id")
         except Exception as exc:
             _handle_fpl_error(exc)
-        version = get_active_model_version(ModelVersion.ModelType.PLAYER_POINTS)
         result = apply_model_to_player_points(result, version)
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
 
 
@@ -134,14 +152,25 @@ class PricePredictView(APIView):
         serializer = PriceRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        version = get_active_model_version(ModelVersion.ModelType.PRICE_CHANGE)
+        cache_key = _build_ml_cache_key(
+            "price",
+            {
+                "payload": payload,
+                "model_version": version.name if version else "base",
+            },
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
         try:
             result = predict_price_change(payload["player_id"])
         except KeyError:
             raise NotFound("Unknown player_id")
         except Exception as exc:
             _handle_fpl_error(exc)
-        version = get_active_model_version(ModelVersion.ModelType.PRICE_CHANGE)
         result = apply_model_to_price(result, version)
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
 
 
@@ -152,14 +181,25 @@ class MatchPredictView(APIView):
         serializer = MatchRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        version = get_active_model_version(ModelVersion.ModelType.MATCH_PREDICTION)
+        cache_key = _build_ml_cache_key(
+            "match",
+            {
+                "payload": payload,
+                "model_version": version.name if version else "base",
+            },
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
         try:
             result = predict_match(payload["home_team_id"], payload["away_team_id"])
         except KeyError:
             raise NotFound("Unknown team_id")
         except Exception as exc:
             _handle_fpl_error(exc)
-        version = get_active_model_version(ModelVersion.ModelType.MATCH_PREDICTION)
         result = apply_model_to_match_prediction(result, version)
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
 
 
@@ -170,6 +210,17 @@ class FDRView(APIView):
         serializer = FDRQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        version = get_active_model_version(ModelVersion.ModelType.FDR)
+        cache_key = _build_ml_cache_key(
+            "fdr",
+            {
+                "payload": payload,
+                "model_version": version.name if version else "base",
+            },
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
         try:
             result = predict_fdr(payload["team_id"], payload.get("horizon", 5))
         except KeyError:
@@ -177,8 +228,8 @@ class FDRView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        version = get_active_model_version(ModelVersion.ModelType.FDR)
         result["model_version"] = version.name if version else "base"
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
 
 
@@ -186,15 +237,23 @@ class UpcomingMatchPredictView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
     def get(self, request):
+        version = get_active_model_version(ModelVersion.ModelType.MATCH_PREDICTION)
+        cache_key = _build_ml_cache_key(
+            "match-upcoming",
+            {"model_version": version.name if version else "base"},
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
         try:
             result = predict_upcoming_matches()
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        version = get_active_model_version(ModelVersion.ModelType.MATCH_PREDICTION)
         for fixture in result.get("fixtures", []):
             fixture["prediction"] = apply_model_to_match_prediction(fixture.get("prediction") or {}, version)
         result["model_version"] = version.name if version else "base"
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
 
 
@@ -211,14 +270,25 @@ class CaptaincyTopPicksView(APIView):
                 raise ValidationError("limit must be an integer")
 
         limit = max(1, min(limit, 20))
+        version = get_active_model_version(ModelVersion.ModelType.CAPTAINCY)
+        cache_key = _build_ml_cache_key(
+            "captaincy",
+            {
+                "limit": limit,
+                "model_version": version.name if version else "base",
+            },
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
 
         try:
             result = predict_captaincy_top_picks(limit=limit)
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        version = get_active_model_version(ModelVersion.ModelType.CAPTAINCY)
         result = apply_model_to_captaincy(result, version)
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
 
 
@@ -229,6 +299,17 @@ class TransferSuggestView(APIView):
         serializer = TransferSuggestRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        version = get_active_model_version(ModelVersion.ModelType.TRANSFER_SUGGESTION)
+        cache_key = _build_ml_cache_key(
+            "transfers-suggest",
+            {
+                "payload": payload,
+                "model_version": version.name if version else "base",
+            },
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
 
         try:
             result = suggest_transfers(
@@ -243,8 +324,8 @@ class TransferSuggestView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        version = get_active_model_version(ModelVersion.ModelType.TRANSFER_SUGGESTION)
         result["model_version"] = version.name if version else "base"
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
 
 
@@ -255,6 +336,17 @@ class FullTeamGenerateView(APIView):
         serializer = FullTeamGenerateRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        version = get_active_model_version(ModelVersion.ModelType.TEAM_GENERATION)
+        cache_key = _build_ml_cache_key(
+            "team-generate",
+            {
+                "payload": payload,
+                "model_version": version.name if version else "base",
+            },
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
 
         try:
             result = generate_full_team(budget=payload.get("budget", 100.0))
@@ -263,93 +355,9 @@ class FullTeamGenerateView(APIView):
         except Exception as exc:
             _handle_fpl_error(exc)
 
-        version = get_active_model_version(ModelVersion.ModelType.TEAM_GENERATION)
         result["model_version"] = version.name if version else "base"
+        cache.set(cache_key, result, ML_RESPONSE_CACHE_TTL_SECONDS)
         return Response(result)
-
-
-class TeamAdminViewSet(viewsets.ModelViewSet):
-    queryset = Team.objects.all().order_by("name")
-    serializer_class = TeamSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-
-
-class PlayerAdminViewSet(viewsets.ModelViewSet):
-    queryset = Player.objects.select_related("team").all().order_by("name")
-    serializer_class = PlayerSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-
-
-class FixtureAdminViewSet(viewsets.ModelViewSet):
-    queryset = Fixture.objects.select_related("home_team", "away_team").all().order_by("-kickoff_at")
-    serializer_class = FixtureSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-
-
-class PredictionAdminViewSet(viewsets.ModelViewSet):
-    queryset = PredictionRecord.objects.select_related(
-        "fixture",
-        "fixture__home_team",
-        "fixture__away_team",
-        "created_by",
-    ).all()
-    serializer_class = PredictionRecordSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-
-
-def _compute_prediction(home_team: Team, away_team: Team):
-    home_score = max(0.2, (home_team.attack_strength + away_team.defense_strength * 0.4) / 60)
-    away_score = max(0.2, (away_team.attack_strength + home_team.defense_strength * 0.4) / 65)
-
-    if home_score > away_score + 0.3:
-        outcome = "Home"
-    elif away_score > home_score + 0.3:
-        outcome = "Away"
-    else:
-        outcome = "Draw"
-
-    confidence = min(0.95, 0.5 + abs(home_score - away_score) / 4)
-    return {
-        "predicted_home_goals": round(home_score, 2),
-        "predicted_away_goals": round(away_score, 2),
-        "outcome": outcome,
-        "confidence": round(confidence * 100, 2),
-    }
-
-
-class RunMatchPredictionView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminOrSuperAdmin]
-
-    def post(self, request):
-        fixture_id = request.data.get("fixture_id")
-        if not fixture_id:
-            return Response(
-                {"detail": "fixture_id is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            fixture = Fixture.objects.select_related("home_team", "away_team").get(pk=fixture_id)
-        except Fixture.DoesNotExist:
-            return Response(
-                {"detail": "Fixture not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        prediction_data = _compute_prediction(fixture.home_team, fixture.away_team)
-        record = PredictionRecord.objects.create(
-            fixture=fixture,
-            predicted_home_goals=Decimal(str(prediction_data["predicted_home_goals"])),
-            predicted_away_goals=Decimal(str(prediction_data["predicted_away_goals"])),
-            outcome=prediction_data["outcome"],
-            confidence=Decimal(str(prediction_data["confidence"])),
-            created_by=request.user,
-        )
-
-        return Response(PredictionRecordSerializer(record).data, status=status.HTTP_201_CREATED)
 
 
 class RetrainModelView(APIView):

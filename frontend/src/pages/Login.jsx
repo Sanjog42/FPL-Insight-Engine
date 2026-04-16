@@ -65,13 +65,6 @@ export default function Login() {
       <header className="navbar">
         <div className="navbar-title">FPL Insight Engine</div>
         <div className="navbar-actions">
-          <a
-            href="#"
-            className="btn btn-outline"
-            onClick={(e) => e.preventDefault()}
-          >
-            Home
-          </a>
           <Link to="/register" className="btn btn-accent">
             Register
           </Link>
@@ -157,6 +150,12 @@ export default function Login() {
               </form>
 
               <p className="auth-footer">
+                <Link to="/forgot-password" className="text-accent">
+                  Forgot password?
+                </Link>
+              </p>
+
+              <p className="auth-footer" style={{ marginTop: "0.75rem", paddingTop: "0.75rem" }}>
                 <span className="text-muted">New to FPL Insight?</span>{" "}
                 <Link to="/register" className="text-accent">
                   Create your account

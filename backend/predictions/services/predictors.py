@@ -491,6 +491,119 @@ def _build_player_query_row(
     ]
 
 
+def _estimate_expected_minutes_from_history(recent_history: List[Dict], player: Dict) -> float:
+    if not recent_history:
+        return _clamp(_estimate_avg_minutes(player), 5.0, 90.0)
+
+    recent_minutes = [_safe_float(item.get("minutes"), 0.0) for item in recent_history[-5:]]
+    if not recent_minutes:
+        return _clamp(_estimate_avg_minutes(player), 5.0, 90.0)
+
+    weighted_minutes = _weighted_average(recent_minutes)
+    starts_count = sum(1 for mins in recent_minutes if mins >= 60.0)
+    cameo_count = sum(1 for mins in recent_minutes if 0.0 < mins < 30.0)
+
+    start_factor = 1.0
+    if starts_count <= 1:
+        start_factor = 0.8
+    elif starts_count == 2:
+        start_factor = 0.9
+
+    cameo_factor = 0.92 if cameo_count >= 2 else 1.0
+    chance_next = player.get("chance_of_playing_next_round")
+    availability_factor = 1.0
+    if chance_next is not None:
+        availability_factor = _clamp(_safe_float(chance_next, 100.0) / 100.0, 0.35, 1.0)
+
+    xmins = weighted_minutes * start_factor * cameo_factor * availability_factor
+    return _clamp(xmins, 5.0, 90.0)
+
+
+def _fixture_points_factor(opponent: Optional[Dict], venue: str) -> float:
+    if not opponent:
+        return 1.0
+
+    if venue == "H":
+        opp_def = _safe_float(opponent.get("strength_defence_away"), _safe_float(opponent.get("strength"), 3.0))
+    else:
+        opp_def = _safe_float(opponent.get("strength_defence_home"), _safe_float(opponent.get("strength"), 3.0))
+
+    defence_delta = (opp_def - 3.0) / 2.0
+    factor = 1.0 - (defence_delta * 0.14)
+    factor += 0.05 if venue == "H" else -0.03
+    return _clamp(factor, 0.82, 1.22)
+
+
+def _position_points_factor(player: Dict) -> float:
+    position = _safe_int(player.get("element_type"), 0)
+    base_by_position = {
+        1: 0.94,  # GK
+        2: 0.98,  # DEF
+        3: 1.06,  # MID
+        4: 1.1,   # FWD
+    }
+    base = base_by_position.get(position, 1.0)
+
+    form = _safe_float(player.get("form"), 0.0)
+    ppg = _safe_float(player.get("points_per_game"), 0.0)
+    momentum_boost = _clamp((form - 4.0) * 0.02 + (ppg - 4.5) * 0.015, -0.06, 0.1)
+    return _clamp(base + momentum_boost, 0.9, 1.18)
+
+
+def _attacking_upside_factor(player: Dict) -> float:
+    minutes = max(_safe_float(player.get("minutes"), 0.0), 1.0)
+    appearances = max(1.0, minutes / 90.0)
+    goals_pg = _safe_float(player.get("goals_scored"), 0.0) / appearances
+    assists_pg = _safe_float(player.get("assists"), 0.0) / appearances
+    form = _safe_float(player.get("form"), 0.0)
+    ict = _safe_float(player.get("ict_index"), 0.0)
+    bps = _safe_float(player.get("bps"), 0.0)
+
+    uplift = 1.0
+    uplift += goals_pg * 0.18
+    uplift += assists_pg * 0.12
+    uplift += _clamp((form - 4.0) * 0.02, -0.04, 0.12)
+    uplift += _clamp((ict - 8.0) * 0.006, -0.03, 0.08)
+    uplift += _clamp((bps - 150.0) / 1500.0, -0.02, 0.06)
+    return _clamp(uplift, 0.9, 1.38)
+
+
+def _clean_sheet_bonus(player: Dict, opponent: Optional[Dict], venue: str, xmins: float) -> float:
+    position = _safe_int(player.get("element_type"), 0)
+    clean_sheet_points = {
+        1: 4.0,  # GK
+        2: 4.0,  # DEF
+        3: 1.0,  # MID
+        4: 0.0,  # FWD
+    }.get(position, 0.0)
+
+    if clean_sheet_points <= 0:
+        return 0.0
+
+    if not opponent:
+        cs_prob = 0.3 if venue == "H" else 0.24
+    else:
+        if venue == "H":
+            opp_attack = _safe_float(
+                opponent.get("strength_attack_away"),
+                _safe_float(opponent.get("strength"), 3.0),
+            )
+        else:
+            opp_attack = _safe_float(
+                opponent.get("strength_attack_home"),
+                _safe_float(opponent.get("strength"), 3.0),
+            )
+
+        # Lower opponent attacking strength => higher clean-sheet probability.
+        cs_prob = 0.3 - ((opp_attack - 3.0) * 0.1)
+        cs_prob += 0.05 if venue == "H" else -0.03
+        cs_prob = _clamp(cs_prob, 0.06, 0.72)
+
+    # FPL clean-sheet points require meaningful minutes; taper below 60.
+    cs_minutes_factor = _clamp((xmins - 35.0) / 30.0, 0.0, 1.0)
+    return round(clean_sheet_points * cs_prob * cs_minutes_factor, 3)
+
+
 def _build_price_windows(values: List[float]) -> Tuple[List[List[float]], List[str]]:
     features: List[List[float]] = []
     labels: List[str] = []
@@ -719,7 +832,31 @@ def predict_player_points(player_id: int, gameweek: Optional[int] = None) -> Dic
     else:
         predicted_raw = (avg_5 * 0.7) + (avg_15 * 0.3)
 
-    predicted = round(_clamp(predicted_raw, 0.0, 20.0) * 2) / 2
+    season_ppg = _safe_float(player.get("points_per_game"), 0.0)
+    weighted_recent_points = _weighted_average(last5_points) if last5_points else avg_5
+
+    if train_features:
+        baseline_pred = (predicted_raw * 0.45) + (weighted_recent_points * 0.35) + (season_ppg * 0.20)
+    else:
+        baseline_pred = (weighted_recent_points * 0.55) + (season_ppg * 0.45)
+
+    xmins = _estimate_expected_minutes_from_history(last_5 or last_15, player)
+    minutes_ratio = _clamp(xmins / 90.0, 0.2, 1.0)
+    # Use a softer minutes penalty so regular starters are not undervalued.
+    minutes_factor = 0.55 + (0.45 * minutes_ratio)
+    if xmins < 45.0:
+        minutes_factor *= 0.9
+    minutes_factor = _clamp(minutes_factor, 0.45, 1.0)
+    fixture_factor = _fixture_points_factor(opponent, venue)
+    position_factor = _position_points_factor(player)
+    attacking_factor = _attacking_upside_factor(player)
+    clean_sheet_bonus = _clean_sheet_bonus(player, opponent, venue, xmins)
+
+    calibrated_pred = baseline_pred * minutes_factor * fixture_factor * position_factor * attacking_factor
+    season_floor = _clamp(season_ppg * 0.58, 0.0, 12.5)
+    calibrated_pred = max(calibrated_pred, season_floor)
+    calibrated_pred += clean_sheet_bonus
+    predicted = round(_clamp(calibrated_pred, 0.0, 25.0), 1)
 
     if len(last5_points) > 1:
         mean = sum(last5_points) / len(last5_points)
@@ -742,9 +879,16 @@ def predict_player_points(player_id: int, gameweek: Optional[int] = None) -> Dic
         "confidence": round(confidence, 2),
         "features_used": {
             "data_source": summary_source,
-            "model": "knn_regression",
+            "model": "knn_regression_calibrated",
             "avg_last_5": round(avg_5, 2),
             "avg_last_15": round(avg_15, 2),
+            "expected_minutes": round(xmins, 1),
+            "minutes_factor": round(minutes_factor, 3),
+            "fixture_factor": round(fixture_factor, 3),
+            "position_factor": round(position_factor, 3),
+            "attacking_factor": round(attacking_factor, 3),
+            "clean_sheet_bonus": round(clean_sheet_bonus, 3),
+            "season_floor": round(season_floor, 2),
             "training_rows": len(train_features),
         },
     }
@@ -862,10 +1006,7 @@ def predict_captaincy_top_picks(limit: int = 10) -> Dict:
 
     target_gw = _get_first_future_gw(events) or _get_next_gw(events) or 1
 
-    train_vectors: List[List[float]] = []
-    train_targets: List[float] = []
-    player_rows: List[Tuple[Dict, List[float], Optional[Dict], str]] = []
-
+    scored = []
     for player in elements:
         team_id = _safe_int(player.get("team"), 0)
         fixture = _fixture_for_team(fixtures, team_id, target_gw)
@@ -877,52 +1018,43 @@ def predict_captaincy_top_picks(limit: int = 10) -> Dict:
         opponent = teams_by_id.get(opponent_id)
 
         form = _safe_float(player.get("form"), 0.0)
-        ppg = _safe_float(player.get("points_per_game"), 0.0)
-        minutes = _safe_float(player.get("minutes"), 0.0)
-        appearances = max(1.0, minutes / 90.0)
-        total_points = _safe_float(player.get("total_points"), 0.0)
-        ppm = total_points / appearances
-        selected = _safe_float(player.get("selected_by_percent"), 0.0)
-        ict = _safe_float(player.get("ict_index"), 0.0)
-        bps = _safe_float(player.get("bps"), 0.0)
-        opponent_def = _strength_defence(opponent or {}, "H" if venue == "A" else "A")
+        season_ppg = _safe_float(player.get("points_per_game"), 0.0)
+        minutes_total = max(_safe_float(player.get("minutes"), 0.0), 1.0)
+        appearances = max(1.0, minutes_total / 90.0)
+        ppm = _safe_float(player.get("total_points"), 0.0) / appearances
+        baseline = (season_ppg * 0.5) + (form * 0.35) + (ppm * 0.15)
 
-        row = [
-            form,
-            ppg,
-            ppm,
-            minutes,
-            selected,
-            ict,
-            bps,
-            1.0 if venue == "H" else 0.0,
-            _safe_float(player.get("now_cost"), 0.0),
-            _safe_float(player.get("goals_scored"), 0.0),
-            _safe_float(player.get("assists"), 0.0),
-            _safe_float(player.get("clean_sheets"), 0.0),
-            float(opponent_def),
-        ]
-        # Pseudo-target: blend stable output with recent signal for ML ranking.
-        target = (0.45 * ppg) + (0.35 * form) + (0.20 * ppm)
+        chance_next = player.get("chance_of_playing_next_round")
+        availability_factor = 1.0
+        if chance_next is not None:
+            availability_factor = _clamp(_safe_float(chance_next, 100.0) / 100.0, 0.35, 1.0)
 
-        train_vectors.append(row)
-        train_targets.append(target)
-        player_rows.append((player, row, opponent, venue))
+        xmins = _clamp(_estimate_avg_minutes(player) * availability_factor, 5.0, 90.0)
+        minutes_ratio = _clamp(xmins / 90.0, 0.2, 1.0)
+        minutes_factor = 0.55 + (0.45 * minutes_ratio)
+        if xmins < 45.0:
+            minutes_factor *= 0.9
+        minutes_factor = _clamp(minutes_factor, 0.45, 1.0)
 
-    if not player_rows:
-        return {"gameweek": target_gw, "model": "knn_captaincy_ranker", "picks": []}
+        fixture_factor = _fixture_points_factor(opponent, venue)
+        position_factor = _position_points_factor(player)
+        attacking_factor = _attacking_upside_factor(player)
+        clean_sheet_bonus = _clean_sheet_bonus(player, opponent, venue, xmins)
 
-    scored = []
-    for idx, (player, row, opponent, venue) in enumerate(player_rows):
-        pred = _knn_regression(train_vectors, train_targets, row, k=17, exclude_index=idx)
-        pred = _clamp(pred, 0.0, 15.0)
+        expected = baseline * minutes_factor * fixture_factor * position_factor * attacking_factor
+        expected = max(expected, _clamp(season_ppg * 0.58, 0.0, 12.5))
+        expected += clean_sheet_bonus
+        expected = _clamp(expected, 0.0, 25.0)
 
-        expected = pred
-        if venue == "H":
-            expected += 0.15
-        if opponent:
-            opp_strength = _safe_float(opponent.get("strength"), 3.0)
-            expected += (3.0 - opp_strength) * 0.10
+        position = _safe_int(player.get("element_type"), 0)
+        captaincy_bias = {
+            1: 0.76,  # GK
+            2: 0.84,  # DEF
+            3: 1.04,  # MID
+            4: 1.08,  # FWD
+        }.get(position, 1.0)
+        captaincy_score = expected * 2.0 * captaincy_bias
+        confidence = _clamp(0.36 + (minutes_ratio * 0.34) + min(season_ppg / 18.0, 0.18), 0.3, 0.9)
 
         scored.append(
             {
@@ -933,13 +1065,37 @@ def predict_captaincy_top_picks(limit: int = 10) -> Dict:
                 "opponent": opponent.get("short_name") if opponent else None,
                 "venue": venue,
                 "predicted_points": round(expected, 2),
-                "captaincy_score": round(expected * 2.0, 2),
-                "model_confidence": round(_clamp(0.45 + min(_safe_float(player.get("minutes"), 0.0) / 3000.0, 0.35), 0.35, 0.85), 2),
+                "captaincy_score": round(captaincy_score, 2),
+                "model_confidence": round(confidence, 2),
             }
         )
 
     scored.sort(key=lambda x: x["captaincy_score"], reverse=True)
 
+    # Recalibrate top captaincy candidates with the same player-points engine
+    # used by the Player Points Predictor page, so module outputs stay aligned.
+    shortlist_size = min(len(scored), max(20, min(40, limit * 3)))
+    for idx in range(shortlist_size):
+        row = scored[idx]
+        try:
+            pp = predict_player_points(int(row["player_id"]), gameweek=target_gw)
+        except Exception:
+            continue
+
+        refined_points = _clamp(_safe_float(pp.get("predicted_points"), row.get("predicted_points", 0.0)), 0.0, 25.0)
+        position = _safe_int(row.get("position"), 0)
+        captaincy_bias = {
+            1: 0.76,  # GK
+            2: 0.84,  # DEF
+            3: 1.04,  # MID
+            4: 1.08,  # FWD
+        }.get(position, 1.0)
+
+        row["predicted_points"] = round(refined_points, 2)
+        row["captaincy_score"] = round(refined_points * 2.0 * captaincy_bias, 2)
+        row["model_confidence"] = round(_clamp(_safe_float(pp.get("confidence"), row.get("model_confidence", 0.5)), 0.1, 0.99), 2)
+
+    scored.sort(key=lambda x: x["captaincy_score"], reverse=True)
     top = scored[: max(1, min(limit, 20))]
     rank = 1
     for row in top:
@@ -948,7 +1104,7 @@ def predict_captaincy_top_picks(limit: int = 10) -> Dict:
 
     return {
         "gameweek": target_gw,
-        "model": "knn_captaincy_ranker",
+        "model": "calibrated_points_captaincy_ranker",
         "picks": top,
     }
 def predict_fdr(team_id: int, horizon: int = 5) -> Dict:

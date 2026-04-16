@@ -314,7 +314,7 @@ export default function Dashboard() {
         <section className="section">
           <h2 className="h2">Analytics Modules</h2>
           <p className="text-muted" style={{ marginBottom: "1.25rem" }}>
-            Click any card to open the full page. Each card shows a preview insight based on mock data.
+            Click any card to open the full page. Each card shows a preview insight based on the latest available data.
           </p>
 
           <div className="grid dash-grid">

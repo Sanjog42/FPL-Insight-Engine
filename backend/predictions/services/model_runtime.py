@@ -101,9 +101,24 @@ def apply_model_to_captaincy(payload: Dict[str, Any], version: ModelVersion | No
     picks = []
     for row in out.get("picks", []):
         new_row = dict(row)
-        points = _clamp(float(new_row.get("predicted_points", 0.0)) * params["player_points_multiplier"], 0.0, 25.0)
+        # Keep captaincy points aligned with player-points module output.
+        points = _clamp(float(new_row.get("predicted_points", 0.0)), 0.0, 25.0)
         new_row["predicted_points"] = round(points, 2)
-        new_row["captaincy_score"] = round(points * 2.0, 2)
+
+        # Preserve any position bias already encoded in the upstream captaincy score.
+        raw_prev_points = float(row.get("predicted_points", 0.0) or 0.0)
+        raw_prev_score = float(row.get("captaincy_score", 0.0) or 0.0)
+        if raw_prev_points > 0:
+            score_ratio = _clamp(raw_prev_score / raw_prev_points, 1.5, 2.6)
+        else:
+            score_ratio = 2.0
+        new_row["captaincy_score"] = round(points * score_ratio, 2)
+
+        if "model_confidence" in new_row:
+            new_row["model_confidence"] = round(
+                _clamp(float(new_row.get("model_confidence", 0.5)) * params["confidence_multiplier"], 0.1, 0.99),
+                2,
+            )
         picks.append(new_row)
 
     picks.sort(key=lambda x: x.get("captaincy_score", 0.0), reverse=True)

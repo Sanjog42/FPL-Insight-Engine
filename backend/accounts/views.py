@@ -198,6 +198,51 @@ class ChangePasswordView(APIView):
         return Response({"message": "Password updated successfully"})
 
 
+class ForgotPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        username = request.data.get("username", "").strip()
+        email = request.data.get("email", "").strip()
+        new_password = request.data.get("new_password", "")
+        confirm_password = request.data.get("confirm_password", "")
+
+        if not username or not email or not new_password or not confirm_password:
+            return Response(
+                {
+                    "detail": "username, email, new_password, confirm_password are required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_password != confirm_password:
+            return Response(
+                {"detail": "New passwords do not match"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(username=username, email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "No account matches the provided username and email"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            validate_password(new_password, user=user)
+        except ValidationError as exc:
+            return Response(
+                {"detail": "Password validation failed", "errors": exc.messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+
+        return Response({"message": "Password reset successfully"})
+
+
 class SuperAdminUsersView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsSuperAdmin]
 
