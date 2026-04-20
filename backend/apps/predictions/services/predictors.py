@@ -970,9 +970,16 @@ def predict_upcoming_matches() -> Dict:
 
     teams = bootstrap.get("teams", [])
     events = bootstrap.get("events", [])
-    next_gw = _get_next_gw(events) or 1
+    next_gw = _get_first_future_gw(events) or _get_next_gw(events) or 1
 
     upcoming = [f for f in fixtures if f.get("event") == next_gw]
+    if not upcoming:
+        future_events = sorted({f.get("event") for f in fixtures if _safe_int(f.get("event"), 0) > 0})
+        if future_events:
+            next_gw = future_events[0]
+            upcoming = [f for f in fixtures if f.get("event") == next_gw]
+
+    upcoming.sort(key=lambda f: f.get("kickoff_time") or "")
     results = []
     for fixture in upcoming:
         home = _find_team(teams, fixture.get("team_h"))

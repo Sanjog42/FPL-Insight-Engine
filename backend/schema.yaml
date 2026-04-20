@@ -1,0 +1,1018 @@
+openapi: 3.0.3
+info:
+  title: FPL Insight Engine API
+  version: 1.0.0
+  description: OpenAPI schema for FPL Insight Engine backend APIs.
+paths:
+  /api/admin/ml/preview/{id}/:
+    get:
+      operationId: admin_ml_preview_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/admin/ml/publish/{id}/:
+    post:
+      operationId: admin_ml_publish_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/admin/ml/retrain/:
+    post:
+      operationId: admin_ml_retrain_create
+      tags:
+      - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelAction'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ModelAction'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ModelAction'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/admin/ml/rollback/:
+    post:
+      operationId: admin_ml_rollback_create
+      tags:
+      - admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelAction'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ModelAction'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ModelAction'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/admin/ml/workflow/:
+    get:
+      operationId: admin_ml_workflow_retrieve
+      parameters:
+      - in: query
+        name: model_type
+        schema:
+          type: string
+        description: Optional model type filter.
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/admin/users/:
+    get:
+      operationId: admin_users_list
+      tags:
+      - admin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SuperAdminUsersListResponse'
+          description: ''
+  /api/auth/admin/users/:
+    get:
+      operationId: auth_admin_users_list
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SuperAdminUsersListResponse'
+          description: ''
+  /api/auth/change-password/:
+    post:
+      operationId: auth_change_password_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePasswordResponse'
+          description: ''
+  /api/auth/forgot-password/:
+    post:
+      operationId: auth_forgot_password_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForgotPasswordResponse'
+          description: ''
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleTokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RoleTokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RoleTokenObtainPair'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleTokenObtainPair'
+          description: ''
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+          description: ''
+    patch:
+      operationId: auth_me_partial_update
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMePatchRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMePatchRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMePatchRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MePatchResponse'
+          description: ''
+  /api/auth/refresh/:
+    post:
+      operationId: auth_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+          description: ''
+  /api/auth/superadmin/delete/{id}/:
+    delete:
+      operationId: auth_superadmin_delete_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteUserResponse'
+          description: ''
+  /api/auth/superadmin/demote/{id}/:
+    put:
+      operationId: auth_superadmin_demote_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoteUserResponse'
+          description: ''
+  /api/auth/superadmin/promote/{id}/:
+    put:
+      operationId: auth_superadmin_promote_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoteUserResponse'
+          description: ''
+  /api/fpl/bootstrap/:
+    get:
+      operationId: fpl_bootstrap_retrieve
+      parameters:
+      - in: query
+        name: force_refresh
+        schema:
+          type: string
+        description: Set to 1 to bypass cache.
+      tags:
+      - fpl
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/fpl/fixtures/:
+    get:
+      operationId: fpl_fixtures_retrieve
+      parameters:
+      - in: query
+        name: force_refresh
+        schema:
+          type: string
+        description: Set to 1 to bypass cache.
+      - in: query
+        name: gw
+        schema:
+          type: integer
+        description: Optional gameweek filter.
+      tags:
+      - fpl
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/captaincy/:
+    get:
+      operationId: predictions_captaincy_retrieve
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      tags:
+      - predictions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/fdr/:
+    get:
+      operationId: predictions_fdr_retrieve
+      parameters:
+      - in: query
+        name: horizon
+        schema:
+          type: integer
+      - in: query
+        name: team_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - predictions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/match/:
+    post:
+      operationId: predictions_match_create
+      tags:
+      - predictions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MatchRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MatchRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/match-upcoming/:
+    get:
+      operationId: predictions_match_upcoming_retrieve
+      tags:
+      - predictions
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/player-points/:
+    post:
+      operationId: predictions_player_points_create
+      tags:
+      - predictions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerPointsRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PlayerPointsRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PlayerPointsRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/price/:
+    post:
+      operationId: predictions_price_create
+      tags:
+      - predictions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PriceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PriceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PriceRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/team/generate/:
+    post:
+      operationId: predictions_team_generate_create
+      tags:
+      - predictions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FullTeamGenerateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FullTeamGenerateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FullTeamGenerateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/predictions/transfers/suggest/:
+    post:
+      operationId: predictions_transfers_suggest_create
+      tags:
+      - predictions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferSuggestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransferSuggestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransferSuggestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/superadmin/delete/{id}/:
+    delete:
+      operationId: superadmin_delete_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - superadmin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteUserResponse'
+          description: ''
+  /api/superadmin/demote/{id}/:
+    put:
+      operationId: superadmin_demote_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - superadmin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoteUserResponse'
+          description: ''
+  /api/superadmin/promote/{id}/:
+    put:
+      operationId: superadmin_promote_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - superadmin
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromoteUserResponse'
+          description: ''
+components:
+  schemas:
+    ChangePasswordRequest:
+      type: object
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+        confirm_password:
+          type: string
+      required:
+      - confirm_password
+      - current_password
+      - new_password
+    ChangePasswordResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    DeleteUserResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    DemoteUserResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+      required:
+      - id
+      - message
+      - role
+      - username
+    ForgotPasswordRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        new_password:
+          type: string
+        confirm_password:
+          type: string
+      required:
+      - confirm_password
+      - email
+      - new_password
+      - username
+    ForgotPasswordResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    FullTeamGenerateRequest:
+      type: object
+      properties:
+        budget:
+          type: number
+          format: double
+          maximum: 130.0
+          minimum: 80.0
+          default: 100.0
+    MatchRequest:
+      type: object
+      properties:
+        home_team_id:
+          type: integer
+          minimum: 1
+        away_team_id:
+          type: integer
+          minimum: 1
+        gw:
+          type: integer
+          minimum: 1
+          nullable: true
+      required:
+      - away_team_id
+      - home_team_id
+    MePatchResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+      required:
+      - email
+      - full_name
+      - id
+      - role
+      - username
+    MeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+      required:
+      - email
+      - full_name
+      - id
+      - role
+      - username
+    ModelAction:
+      type: object
+      properties:
+        model_type:
+          $ref: '#/components/schemas/ModelTypeEnum'
+      required:
+      - model_type
+    ModelTypeEnum:
+      enum:
+      - general
+      - player_points
+      - price_change
+      - match_prediction
+      - fdr
+      - captaincy
+      - transfer_suggestion
+      - team_generation
+      type: string
+      description: |-
+        * `general` - General
+        * `player_points` - Player Points
+        * `price_change` - Price Change
+        * `match_prediction` - Match Prediction
+        * `fdr` - Fixture Difficulty
+        * `captaincy` - Captaincy
+        * `transfer_suggestion` - Transfer Suggestion
+        * `team_generation` - Team Generation
+    PatchedMePatchRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+    PlayerPointsRequest:
+      type: object
+      properties:
+        player_id:
+          type: integer
+          minimum: 1
+        gameweek:
+          type: integer
+          minimum: 1
+          nullable: true
+      required:
+      - player_id
+    PositionEnum:
+      enum:
+      - GK
+      - DEF
+      - MID
+      - FWD
+      type: string
+      description: |-
+        * `GK` - GK
+        * `DEF` - DEF
+        * `MID` - MID
+        * `FWD` - FWD
+    PriceRequest:
+      type: object
+      properties:
+        player_id:
+          type: integer
+          minimum: 1
+      required:
+      - player_id
+    PromoteUserResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+      required:
+      - id
+      - message
+      - role
+      - username
+    RegisterRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+      - email
+      - password
+      - username
+    RegisterResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+      - message
+    RoleTokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - password
+      - username
+    SuperAdminUsersListResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+        is_active:
+          type: boolean
+      required:
+      - email
+      - full_name
+      - id
+      - is_active
+      - role
+      - username
+    TeamSlot:
+      type: object
+      properties:
+        slot_id:
+          type: string
+        position:
+          $ref: '#/components/schemas/PositionEnum'
+        player_id:
+          type: integer
+          minimum: 1
+      required:
+      - player_id
+      - position
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+    TransferSuggestRequest:
+      type: object
+      properties:
+        team_slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamSlot'
+        remaining_budget:
+          type: number
+          format: double
+          minimum: 0
+        free_transfers:
+          type: integer
+          maximum: 5
+          minimum: 1
+          default: 1
+      required:
+      - remaining_budget
+      - team_slots
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
 from rest_framework import permissions, status
+from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.users.models import UserProfile
 from apps.users.permissions import IsSuperAdmin
@@ -13,6 +15,22 @@ User = get_user_model()
 class SuperAdminUsersView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsSuperAdmin]
 
+    @extend_schema(
+        responses={
+            200: inline_serializer(
+                name="SuperAdminUsersListResponse",
+                many=True,
+                fields={
+                    "id": serializers.IntegerField(),
+                    "username": serializers.CharField(),
+                    "email": serializers.EmailField(),
+                    "full_name": serializers.CharField(allow_blank=True),
+                    "role": serializers.CharField(),
+                    "is_active": serializers.BooleanField(),
+                },
+            )
+        }
+    )
     def get(self, request):
         users = User.objects.select_related("profile").order_by("id")
         payload = []
@@ -33,6 +51,20 @@ class SuperAdminUsersView(APIView):
 class PromoteUserView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsSuperAdmin]
 
+    @extend_schema(
+        request=None,
+        responses={
+            200: inline_serializer(
+                name="PromoteUserResponse",
+                fields={
+                    "message": serializers.CharField(),
+                    "id": serializers.IntegerField(),
+                    "username": serializers.CharField(),
+                    "role": serializers.CharField(),
+                },
+            )
+        }
+    )
     def put(self, request, id):
         try:
             user = User.objects.get(pk=id)
@@ -52,6 +84,20 @@ class PromoteUserView(APIView):
 class DemoteUserView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsSuperAdmin]
 
+    @extend_schema(
+        request=None,
+        responses={
+            200: inline_serializer(
+                name="DemoteUserResponse",
+                fields={
+                    "message": serializers.CharField(),
+                    "id": serializers.IntegerField(),
+                    "username": serializers.CharField(),
+                    "role": serializers.CharField(),
+                },
+            )
+        }
+    )
     def put(self, request, id):
         try:
             user = User.objects.get(pk=id)
@@ -71,6 +117,9 @@ class DemoteUserView(APIView):
 class DeleteUserView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsSuperAdmin]
 
+    @extend_schema(
+        responses={200: inline_serializer(name="DeleteUserResponse", fields={"message": serializers.CharField()})}
+    )
     def delete(self, request, id):
         if request.user.id == id:
             return Response({"detail": "You cannot delete your own account"}, status=status.HTTP_400_BAD_REQUEST)

@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
 from rest_framework import permissions, status
+from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.users.utils import get_user_role
 
@@ -11,6 +13,20 @@ User = get_user_model()
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses={
+            200: inline_serializer(
+                name="MeResponse",
+                fields={
+                    "id": serializers.IntegerField(),
+                    "username": serializers.CharField(),
+                    "email": serializers.EmailField(),
+                    "full_name": serializers.CharField(allow_blank=True),
+                    "role": serializers.CharField(),
+                },
+            )
+        }
+    )
     def get(self, request):
         u = request.user
         return Response(
@@ -23,6 +39,28 @@ class MeView(APIView):
             }
         )
 
+    @extend_schema(
+        request=inline_serializer(
+            name="MePatchRequest",
+            fields={
+                "username": serializers.CharField(required=False),
+                "email": serializers.EmailField(required=False),
+                "full_name": serializers.CharField(required=False),
+            },
+        ),
+        responses={
+            200: inline_serializer(
+                name="MePatchResponse",
+                fields={
+                    "id": serializers.IntegerField(),
+                    "username": serializers.CharField(),
+                    "email": serializers.EmailField(),
+                    "full_name": serializers.CharField(allow_blank=True),
+                    "role": serializers.CharField(),
+                },
+            )
+        },
+    )
     def patch(self, request):
         u = request.user
         username = request.data.get("username")

@@ -36,7 +36,9 @@ export default function MatchPrediction() {
         const gw = res?.gameweek ?? null;
         const fixtures = Array.isArray(res?.fixtures) ? res.fixtures : [];
         const sameGwFixtures =
-          gw == null ? fixtures : fixtures.filter((fixture) => fixture?.event === gw);
+          gw == null
+            ? fixtures
+            : fixtures.filter((fixture) => Number(fixture?.event) === Number(gw));
         setUpcoming(sameGwFixtures);
         setUpcomingGw(gw);
       } catch (ex) {

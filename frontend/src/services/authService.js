@@ -15,7 +15,7 @@ export async function login({ username, password }) {
   const tokenData = await apiFetch("/api/auth/login/", {
     method: "POST",
     body: JSON.stringify({ username: username.trim(), password }),
-  });
+  }, true, { skipAuth: true, skipRefresh: true });
 
   const accessToken = tokenData.access || tokenData.token;
   if (!accessToken) {
@@ -34,14 +34,14 @@ export async function register(payload) {
   return apiFetch("/api/auth/register/", {
     method: "POST",
     body: JSON.stringify(payload),
-  });
+  }, true, { skipAuth: true, skipRefresh: true });
 }
 
 export async function forgotPassword(payload) {
   return apiFetch("/api/auth/forgot-password/", {
     method: "POST",
     body: JSON.stringify(payload),
-  });
+  }, true, { skipAuth: true, skipRefresh: true });
 }
 
 export function logout() {

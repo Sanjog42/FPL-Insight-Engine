@@ -2,6 +2,8 @@ from django.core.cache import cache
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.views import APIView
 
 from apps.predictions.models import ModelVersion
@@ -36,6 +38,18 @@ from apps.users.permissions import IsUserOrAbove
 class BootstrapView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="force_refresh",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Set to 1 to bypass cache.",
+                required=False,
+            )
+        ],
+        responses={200: OpenApiTypes.OBJECT},
+    )
     def get(self, request):
         force_refresh = request.query_params.get("force_refresh") == "1"
         try:
@@ -50,6 +64,25 @@ class BootstrapView(APIView):
 class FixturesView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="force_refresh",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Set to 1 to bypass cache.",
+                required=False,
+            ),
+            OpenApiParameter(
+                name="gw",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="Optional gameweek filter.",
+                required=False,
+            ),
+        ],
+        responses={200: OpenApiTypes.OBJECT},
+    )
     def get(self, request):
         force_refresh = request.query_params.get("force_refresh") == "1"
         gw_param = request.query_params.get("gw")
@@ -73,6 +106,7 @@ class FixturesView(APIView):
 class PlayerPointsPredictView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(request=PlayerPointsRequestSerializer, responses={200: OpenApiTypes.OBJECT})
     def post(self, request):
         serializer = PlayerPointsRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -96,6 +130,7 @@ class PlayerPointsPredictView(APIView):
 class PricePredictView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(request=PriceRequestSerializer, responses={200: OpenApiTypes.OBJECT})
     def post(self, request):
         serializer = PriceRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -119,6 +154,7 @@ class PricePredictView(APIView):
 class MatchPredictView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(request=MatchRequestSerializer, responses={200: OpenApiTypes.OBJECT})
     def post(self, request):
         serializer = MatchRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -142,6 +178,13 @@ class MatchPredictView(APIView):
 class FDRView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("team_id", OpenApiTypes.INT, OpenApiParameter.QUERY, required=True),
+            OpenApiParameter("horizon", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False),
+        ],
+        responses={200: OpenApiTypes.OBJECT},
+    )
     def get(self, request):
         serializer = FDRQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
@@ -166,6 +209,7 @@ class FDRView(APIView):
 class UpcomingMatchPredictView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(responses={200: OpenApiTypes.OBJECT})
     def get(self, request):
         version = get_active_model_version(ModelVersion.ModelType.MATCH_PREDICTION)
         cache_key = build_ml_cache_key("match-upcoming", {"model_version": version.name if version else "base"})
@@ -193,6 +237,10 @@ class UpcomingMatchPredictView(APIView):
 class CaptaincyTopPicksView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(
+        parameters=[OpenApiParameter("limit", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False)],
+        responses={200: OpenApiTypes.OBJECT},
+    )
     def get(self, request):
         limit_param = request.query_params.get("limit")
         limit = 10
@@ -222,6 +270,7 @@ class CaptaincyTopPicksView(APIView):
 class TransferSuggestView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(request=TransferSuggestRequestSerializer, responses={200: OpenApiTypes.OBJECT})
     def post(self, request):
         serializer = TransferSuggestRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -253,6 +302,7 @@ class TransferSuggestView(APIView):
 class FullTeamGenerateView(APIView):
     permission_classes = [IsAuthenticated, IsUserOrAbove]
 
+    @extend_schema(request=FullTeamGenerateRequestSerializer, responses={200: OpenApiTypes.OBJECT})
     def post(self, request):
         serializer = FullTeamGenerateRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

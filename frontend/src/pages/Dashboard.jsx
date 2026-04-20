@@ -39,6 +39,19 @@ function positionLabel(position) {
   return "-";
 }
 
+function getFirstFutureEvent(events) {
+  const now = Date.now();
+  const withFutureDeadline = (Array.isArray(events) ? events : [])
+    .filter((event) => {
+      const ts = event?.deadline_time ? new Date(event.deadline_time).getTime() : NaN;
+      return Number.isFinite(ts) && ts > now;
+    })
+    .sort((a, b) => a.id - b.id);
+
+  if (withFutureDeadline.length) return withFutureDeadline[0];
+  return (Array.isArray(events) ? events : []).find((event) => event?.is_next) || null;
+}
+
 export default function Dashboard() {
   const [budget, setBudget] = useState(0.0);
   const [transfers, setTransfers] = useState(0);
@@ -82,9 +95,9 @@ export default function Dashboard() {
 
     async function loadBootstrap() {
       try {
-        const res = await getBootstrap(false);
+        const res = await getBootstrap(true);
         const events = res?.data?.events || [];
-        const next = events.find((event) => event.is_next);
+        const next = getFirstFutureEvent(events);
         if (!next || !active) return;
 
         const deadline = next.deadline_time ? new Date(next.deadline_time).getTime() : null;

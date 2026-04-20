@@ -43,12 +43,13 @@ export function roleHomePath(role) {
 
 /* ================= CORE FETCH ================= */
 
-export async function apiFetch(path, options = {}, retry = true) {
+export async function apiFetch(path, options = {}, retry = true, config = {}) {
+  const { skipAuth = false, skipRefresh = false } = config;
   const headers = options.headers ? { ...options.headers } : {};
   headers["Content-Type"] = "application/json";
 
   const token = getToken();
-  if (token) {
+  if (!skipAuth && token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
@@ -62,7 +63,7 @@ export async function apiFetch(path, options = {}, retry = true) {
     ?.includes("application/json");
   const data = isJson ? await res.json() : null;
 
-  if (res.status === 401 && retry) {
+  if (res.status === 401 && retry && !skipRefresh) {
     const refresh = getRefreshToken();
 
     if (!refresh) {
@@ -84,7 +85,7 @@ export async function apiFetch(path, options = {}, retry = true) {
     const refreshData = await refreshRes.json();
     setToken(refreshData.access);
 
-    return apiFetch(path, options, false);
+    return apiFetch(path, options, false, config);
   }
 
   if (!res.ok) {

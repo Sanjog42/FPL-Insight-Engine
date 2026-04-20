@@ -2,6 +2,8 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from apps.predictions.models import ModelTrainingJob, ModelVersion
 from apps.predictions.serializers import ModelActionSerializer, ModelTrainingJobSerializer, ModelVersionSerializer
@@ -16,6 +18,7 @@ from apps.users.permissions import IsAdminOrSuperAdmin
 class RetrainModelView(APIView):
     permission_classes = [IsAdminOrSuperAdmin]
 
+    @extend_schema(request=ModelActionSerializer, responses={201: OpenApiTypes.OBJECT})
     def post(self, request):
         serializer = ModelActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -41,6 +44,18 @@ class RetrainModelView(APIView):
 class ModelWorkflowView(APIView):
     permission_classes = [IsAdminOrSuperAdmin]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "model_type",
+                OpenApiTypes.STR,
+                OpenApiParameter.QUERY,
+                required=False,
+                description="Optional model type filter.",
+            )
+        ],
+        responses={200: OpenApiTypes.OBJECT},
+    )
     def get(self, request):
         model_type = validate_model_type(request.query_params.get("model_type"), allow_empty=True)
 
@@ -71,6 +86,7 @@ class ModelWorkflowView(APIView):
 class PreviewDraftView(APIView):
     permission_classes = [IsAdminOrSuperAdmin]
 
+    @extend_schema(responses={200: OpenApiTypes.OBJECT})
     def get(self, request, id):
         try:
             draft = ModelVersion.objects.get(pk=id, status=ModelVersion.Status.DRAFT)
@@ -135,6 +151,7 @@ class PreviewDraftView(APIView):
 class PublishDraftView(APIView):
     permission_classes = [IsAdminOrSuperAdmin]
 
+    @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT})
     def post(self, request, id):
         try:
             draft = ModelVersion.objects.get(pk=id, status=ModelVersion.Status.DRAFT)
@@ -158,6 +175,7 @@ class PublishDraftView(APIView):
 class RollbackModelView(APIView):
     permission_classes = [IsAdminOrSuperAdmin]
 
+    @extend_schema(request=ModelActionSerializer, responses={200: OpenApiTypes.OBJECT})
     def post(self, request):
         serializer = ModelActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

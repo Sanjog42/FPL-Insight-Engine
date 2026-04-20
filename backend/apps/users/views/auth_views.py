@@ -2,9 +2,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from rest_framework import permissions, status
+from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.users.models import UserProfile
 from apps.users.serializers import RoleTokenObtainPairSerializer
@@ -20,17 +22,34 @@ class LoginView(TokenObtainPairView):
 class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="RegisterRequest",
+            fields={
+                "full_name": serializers.CharField(required=False),
+                "username": serializers.CharField(),
+                "email": serializers.EmailField(),
+                "password": serializers.CharField(),
+                "confirm_password": serializers.CharField(required=False),
+            },
+        ),
+        responses={201: inline_serializer(name="RegisterResponse", fields={"message": serializers.CharField()})},
+    )
     def post(self, request):
         full_name = request.data.get("full_name", "").strip()
         username = request.data.get("username", "").strip()
         email = request.data.get("email", "").strip()
         password = request.data.get("password", "")
+        confirm_password = request.data.get("confirm_password", "")
 
         if not username or not email or not password:
             return Response(
                 {"detail": "username, email, password are required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if confirm_password and password != confirm_password:
+            return Response({"detail": "Passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
 
         if User.objects.filter(username=username).exists():
             return Response({"detail": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
@@ -62,6 +81,17 @@ class RegisterView(APIView):
 class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="ChangePasswordRequest",
+            fields={
+                "current_password": serializers.CharField(),
+                "new_password": serializers.CharField(),
+                "confirm_password": serializers.CharField(),
+            },
+        ),
+        responses={200: inline_serializer(name="ChangePasswordResponse", fields={"message": serializers.CharField()})},
+    )
     def post(self, request):
         current_password = request.data.get("current_password", "")
         new_password = request.data.get("new_password", "")
@@ -97,6 +127,18 @@ class ChangePasswordView(APIView):
 class ForgotPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="ForgotPasswordRequest",
+            fields={
+                "username": serializers.CharField(),
+                "email": serializers.EmailField(),
+                "new_password": serializers.CharField(),
+                "confirm_password": serializers.CharField(),
+            },
+        ),
+        responses={200: inline_serializer(name="ForgotPasswordResponse", fields={"message": serializers.CharField()})},
+    )
     def post(self, request):
         username = request.data.get("username", "").strip()
         email = request.data.get("email", "").strip()
